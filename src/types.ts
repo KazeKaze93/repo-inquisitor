@@ -1,31 +1,12 @@
-/**
- * Result of a Python script execution.
- */
-export interface PythonExecutionResult {
-  /** Whether the execution was successful */
+export interface PythonExecutionResult<T = unknown> {
   success: boolean;
-  /** Parsed JSON data from the last line of stdout (if successful) */
-  data?: unknown;
-  /** Log lines from stdout (all lines except the last) */
-  logs: string[];
-  /** Error message from stderr or execution failure */
+  data?: T;
   error?: string;
-  /** Exit code from the Python process */
-  exitCode?: number;
+  logs?: string[]; // 👈 Должно быть string[]
 }
 
-/**
- * Options for configuring the Python Bridge.
- */
 export interface BridgeOptions {
-  /** Custom path to the venv directory. If not provided, auto-discovers from project root. */
-  venvPath?: string;
-  /** Working directory for Python script execution. Defaults to process.cwd(). */
+  pythonPath?: string;
   cwd?: string;
-  /** Environment variables to pass to the Python process */
-  env?: NodeJS.ProcessEnv;
-  /** Timeout in milliseconds. If not set, no timeout is applied. */
-  timeout?: number;
+  env?: Record<string, string>;
 }
-
-
