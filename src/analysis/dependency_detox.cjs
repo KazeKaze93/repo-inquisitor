@@ -236,3 +236,4 @@ const mode = args.includes("--nuke") ? "nuke" : "scan";
 const pkgName = args[args.indexOf("--nuke") + 1];
 
 new DependencyDetox(process.cwd()).run(mode, pkgName);
+
