@@ -52,10 +52,10 @@ import { PythonBridge } from "@kazekaze93/repo-inquisitor";
 const bridge = new PythonBridge();
 
 async function run() {
-  const result = await bridge.executeScript(
-    "/absolute/path/to/script.py",
-    ["arg1", "arg2"]
-  );
+  const result = await bridge.executeScript("/absolute/path/to/script.py", [
+    "arg1",
+    "arg2",
+  ]);
 
   if (result.success) {
     console.log("Python data:", result.data);
