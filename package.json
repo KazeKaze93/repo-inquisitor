@@ -1,5 +1,5 @@
 {
-  "name": "@kazekaze93/core-lib",
+  "name": "@kazekaze93/repo-inquisitor",
   "version": "1.0.0",
   "bin": {
     "inquisitor": "./dist/cli.js"
