@@ -1,24 +1,23 @@
 import * as fs from "fs";
 import * as path from "path";
 
+// === CONFIGURATION ===
 const CONFIG = {
   rootDir: process.cwd(),
-  outputFile: path.join(process.cwd(), ".ai", "FULL_CONTEXT.txt"),
+  aiDir: path.join(process.cwd(), ".ai"),
+  outputFile: path.join(process.cwd(), ".ai", "GEMINI_PROMPT.txt"),
+  rulesFile: path.join(process.cwd(), ".ai", "RULES.md"),
 
-  includeDirs: [
-    "src",
-    "electron", // Если есть отдельная папка для электрона
-    "scripts",
-  ],
+  includeDirs: ["src", "electron", "scripts", "python_src"],
 
   includeRootFiles: [
     "package.json",
     "tsconfig.json",
     "vite.config.ts",
     "electron.vite.config.ts",
-    "tailwind.config.js",
-    ".cursorrules",
+    "tailwind.config.ts",
     "drizzle.config.ts",
+    "repomix.config.json",
   ],
 
   ignorePatterns: [
@@ -35,14 +34,23 @@ const CONFIG = {
     "*.log",
     "*.sqlite",
     "*.db",
-    "components/ui", // Shadcn компоненты часто стандартные, можно игнорить или брать выборочно
+    "*.png",
+    "*.ico",
+    "*.svg",
     "assets",
     "public",
+    "context-packer.ts",
   ],
 
-  maxLinesPerFile: 300,
-  maxTotalLines: 4000,
+  // GEMINI 2.5 FLASH LIMITS (1M Input Tokens)
+  // 1 Token ~= 4 chars. 1M tokens ~= 4MB text.
+  // Avg line length ~= 60 chars.
+  // Safe limit: ~65,000 - 100,000 lines.
+  maxLinesPerFile: 5000,
+  maxTotalLines: 100000,
 };
+
+// === HELPERS ===
 
 const isIgnored = (filePath: string): boolean => {
   const relative = path.relative(CONFIG.rootDir, filePath);
@@ -50,138 +58,182 @@ const isIgnored = (filePath: string): boolean => {
     CONFIG.ignorePatterns.some(
       (p) => relative.includes(p) || filePath.endsWith(p)
     )
-    )
+  )
     return true;
+
   const parts = relative.split(path.sep);
+  if (parts.length === 1 && !CONFIG.includeRootFiles.includes(parts[0]))
+    return true;
   if (parts.length > 1 && !CONFIG.includeDirs.includes(parts[0])) return true;
+
   return false;
 };
 
 const minifyAndTruncate = (content: string, filePath: string): string => {
   let lines = content.split("\n");
-
-  lines = lines.filter(
-    (l) => l.trim().length > 0 && !l.trim().startsWith("//")
-  );
+  lines = lines.filter((l) => l.trim().length > 0);
 
   if (lines.length > CONFIG.maxLinesPerFile) {
-    const head = lines.slice(0, 50).join("\n");
-    const tail = lines.slice(-50).join("\n");
+    const head = lines.slice(0, 100).join("\n");
+    const tail = lines.slice(-100).join("\n");
     return `${head}\n\n... [SNIPPED ${
-      lines.length - 100
+      lines.length - 200
     } LINES] ...\n\n${tail}`;
   }
-
   return lines.join("\n");
 };
 
 const generateTree = (dir: string, prefix = ""): string => {
   let tree = "";
-  const files = fs.readdirSync(dir);
+  let files = [];
+  try {
+    files = fs.readdirSync(dir);
+  } catch (e) {
+    return "";
+  }
 
   files.sort((a, b) => {
-    const aStat = fs.statSync(path.join(dir, a));
-    const bStat = fs.statSync(path.join(dir, b));
-    if (aStat.isDirectory() && !bStat.isDirectory()) return -1;
-    if (!aStat.isDirectory() && bStat.isDirectory()) return 1;
-    return a.localeCompare(b);
+    const aPath = path.join(dir, a);
+    const bPath = path.join(dir, b);
+    try {
+      const aStat = fs.statSync(aPath);
+      const bStat = fs.statSync(bPath);
+      if (aStat.isDirectory() && !bStat.isDirectory()) return -1;
+      if (!aStat.isDirectory() && bStat.isDirectory()) return 1;
+      return a.localeCompare(b);
+    } catch {
+      return 0;
+    }
   });
 
-  files.forEach((file, index) => {
+  const filteredFiles = files.filter((file) => {
     const fullPath = path.join(dir, file);
-    if (
-      CONFIG.ignorePatterns.some(
-        (p) => file === p || fullPath.includes("node_modules")
-      )
-    )
-      return; // Базовый игнор для дерева
+    return !CONFIG.ignorePatterns.some(
+      (p) => file === p || fullPath.includes("node_modules")
+    );
+  });
 
-    const isLast = index === files.length - 1;
+  filteredFiles.forEach((file, index) => {
+    const fullPath = path.join(dir, file);
+    const isLast = index === filteredFiles.length - 1;
     tree += `${prefix}${isLast ? "└── " : "├── "}${file}\n`;
 
-    if (fs.statSync(fullPath).isDirectory()) {
-      tree += generateTree(fullPath, prefix + (isLast ? "    " : "│   "));
-    }
+    try {
+      if (fs.statSync(fullPath).isDirectory()) {
+        tree += generateTree(fullPath, prefix + (isLast ? "    " : "│   "));
+      }
+    } catch {}
   });
   return tree;
 };
 
-const run = () => {
-  console.log("🔪 Surgical Context Packer v2 starting...");
+// === MAIN ===
 
-  let output = `# PROJECT CONTEXT (OPTIMIZED)\nDate: ${new Date().toISOString()}\n\n`;
-  output += `## FILE TREE\n\`\`\`\n${generateTree(CONFIG.rootDir)}\n\`\`\`\n\n`;
-  output += `## CONTENT\n`;
+const run = () => {
+  console.log("🔪 Surgical Context Packer v3 (High Capacity Mode)...");
+
+  if (!fs.existsSync(CONFIG.aiDir))
+    fs.mkdirSync(CONFIG.aiDir, { recursive: true });
+
+  let userRules = "";
+  if (fs.existsSync(CONFIG.rulesFile)) {
+    userRules = fs.readFileSync(CONFIG.rulesFile, "utf-8");
+    console.log("📜 Rules found.");
+  } else {
+    userRules = "No specific user rules defined.";
+  }
+
+  const treeString = generateTree(CONFIG.rootDir);
+
+  let output = `
+=== IDENTITY ===
+You are a Senior Software Architect (Gemini 2.5 Flash).
+Goal: Prevent "UI drift" and spaghetti code.
+
+=== USER RULES ===
+${userRules}
+
+=== PROJECT STRUCTURE ===
+\`\`\`
+${treeString}
+\`\`\`
+
+=== SOURCE CODE ===
+`;
 
   let totalLines = 0;
   let fileCount = 0;
 
-  CONFIG.includeRootFiles.forEach((fileName) => {
-    const fullPath = path.join(CONFIG.rootDir, fileName);
-    if (fs.existsSync(fullPath)) {
-      const content = fs.readFileSync(fullPath, "utf-8");
-      output += `<file path="${fileName}">\n${minifyAndTruncate(
-        content,
-        fileName
-      )}\n</file>\n\n`;
-      totalLines += content.split("\n").length;
+  const processFile = (filePath: string) => {
+    if (isIgnored(filePath)) return;
+
+    const ext = path.extname(filePath);
+    if (
+      ![
+        ".ts",
+        ".tsx",
+        ".js",
+        ".cjs",
+        ".json",
+        ".py",
+        ".css",
+        ".sql",
+        ".md",
+        ".html",
+      ].includes(ext)
+    )
+      return;
+
+    try {
+      const content = fs.readFileSync(filePath, "utf-8");
+      const relative = path.relative(CONFIG.rootDir, filePath);
+      const processed = minifyAndTruncate(content, filePath);
+
+      output += `\n<file path="${relative}">\n${processed}\n</file>\n`;
+      totalLines += processed.split("\n").length;
       fileCount++;
+    } catch (e) {
+      console.warn(`⚠️ Failed to read ${filePath}`);
     }
-  });
+  };
 
-  const processDir = (dirPath: string) => {
-    if (!fs.existsSync(dirPath)) return;
-    const files = fs.readdirSync(dirPath);
-
-    files.forEach((file) => {
-      const fullPath = path.join(dirPath, file);
+  const traverseDir = (dir: string) => {
+    if (!fs.existsSync(dir)) return;
+    const files = fs.readdirSync(dir);
+    files.forEach((f) => {
+      const fullPath = path.join(dir, f);
       const stat = fs.statSync(fullPath);
-
-      if (isIgnored(fullPath)) return;
-
-      if (stat.isDirectory()) {
-        processDir(fullPath);
-      } else {
-        if (
-          ![".ts", ".tsx", ".js", ".json", ".py", ".css"].includes(
-            path.extname(file)
-          )
-        )
-          return;
-
-        const content = fs.readFileSync(fullPath, "utf-8");
-        const processed = minifyAndTruncate(content, file);
-        const relative = path.relative(CONFIG.rootDir, fullPath);
-
-        output += `<file path="${relative}">\n${processed}\n</file>\n\n`;
-        totalLines += processed.split("\n").length;
-        fileCount++;
-      }
+      if (stat.isDirectory()) traverseDir(fullPath);
+      else processFile(fullPath);
     });
   };
 
-  CONFIG.includeDirs.forEach((dir) =>
-    processDir(path.join(CONFIG.rootDir, dir))
-  );
+  CONFIG.includeRootFiles.forEach((f) => {
+    const p = path.join(CONFIG.rootDir, f);
+    if (fs.existsSync(p)) processFile(p);
+  });
 
-  const aiDir = path.dirname(CONFIG.outputFile);
-  if (!fs.existsSync(aiDir)) fs.mkdirSync(aiDir);
+  CONFIG.includeDirs.forEach((d) => traverseDir(path.join(CONFIG.rootDir, d)));
+
+  output += `
+\n=== INSTRUCTION ===
+Await my next command.
+`;
 
   fs.writeFileSync(CONFIG.outputFile, output);
 
-  console.log(`✅ Done!`);
-  console.log(`   Files packed: ${fileCount}`);
-  console.log(`   Total Lines: ~${totalLines}`);
-  console.log(
-    `   Output size: ${(fs.statSync(CONFIG.outputFile).size / 1024).toFixed(
-      2
-    )} KB`
+  const sizeMB = (fs.statSync(CONFIG.outputFile).size / (1024 * 1024)).toFixed(
+    2
   );
 
+  console.log(`✅ GEMINI PROMPT GENERATED: ${CONFIG.outputFile}`);
+  console.log(`   Files: ${fileCount} | Lines: ~${totalLines}`);
+  console.log(`   Size: ${sizeMB} MB`);
+
   if (totalLines > CONFIG.maxTotalLines) {
-    console.warn(
-      `⚠️  WARNING: Output is still large (${totalLines} lines). Consider adding more ignores.`
-    );
+    console.warn(`⚠️  OVERFLOW: ${totalLines} lines. Might exceed 1M tokens.`);
+  } else {
+    console.log(`✨ Fits comfortably within Gemini 2.5 Flash context.`);
   }
 };
 

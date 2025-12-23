@@ -48,15 +48,11 @@ const COMMANDS: Record<string, CommandDef> = {
     file: "src/viz/server.cjs",
     description: "Start interactive dependency visualizer (Node)",
   },
-  "ctx:pack": {
+
+  ctx: {
     type: "node",
     file: "dist/ai/context-packer.js",
-    description: "Pack project context for LLM (Node)",
-  },
-  "ctx:prompt": {
-    type: "node",
-    file: "dist/ai/gen-gemini-prompt.js",
-    description: "Generate Gemini System Prompt (Node)",
+    description: "Pack full project context for Gemini 2.5 (Node)",
   },
 };
 
