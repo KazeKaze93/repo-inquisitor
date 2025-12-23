@@ -65,3 +65,4 @@ def scan_project(root_dir):
 
 if __name__ == '__main__':
     scan_project(sys.argv[1])
+

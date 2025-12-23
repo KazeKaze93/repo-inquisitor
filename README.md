@@ -1,75 +1,116 @@
-# 📦 Hybrid Node/Python Core Library
+## 📦 Repo Inquisitor
 
-> **WARNING:** This package requires a working Python 3 environment. Yes, you read that right—we're mixing Node.js and Python in 2024. Because why choose one runtime when you can have both?
+> **Hybrid Node + Python toolkit for poking at repositories.**  
+> TypeScript on the outside, Python on the inside.
 
-This library serves as the core logic layer, bridging TypeScript interfaces with Python automation scripts. It is designed to be installed directly from Git, because npm registries are for peasants.
+`@kazekaze93/repo-inquisitor` is a small core library and CLI that:
 
-## 🏗 Architecture (The Hybrid Hell)
+- **Bridges Node ↔ Python** via a thin `child_process` wrapper (`PythonBridge`).
+- **Bootstraps a Python venv** on install (`scripts/install.js` + `requirements.txt`).
+- Exposes a **CLI entrypoint** `inquisitor` that delegates to Python scripts in `python_src`.
+- Ships a few **internal helpers** (analysis/viz/reviewer/AI context tooling) used by higher-level tools.
 
-- **Frontend Interface:** TypeScript (Node.js/Electron compatible). Because JavaScript wasn't enough.
-- **Backend Logic:** Python 3 + `pydantic` + `playwright` (Sidecar pattern). Because reinventing wheels is fun.
-- **Communication:** `stdio` (JSON-RPC style) or Child Process execution. Because IPC is overrated.
+The goal is to keep the integration minimal and explicit, not to build Yet Another Framework™.
 
-**Why this architecture?** Because we can. And because sometimes Python libraries are just better than their Node.js counterparts. Deal with it.
+## 🏗 Architecture
+
+- **Node side:** TypeScript, compiled to `dist/`. Public surface is in `src/index.ts`.
+- **Python side:** Plain Python scripts in `python_src/` (and subpackages), executed as child processes.
+- **Bridge:** `PythonBridge` looks for a local `venv` first, then falls back to `python`/`python3` in `PATH`.
+- **CLI:** `bin.inquisitor -> dist/cli.js` → resolves a command → picks a Python script → runs it via the bridge.
+
+No hidden daemons, no sockets, just `spawn(python, script.py, args...)` and a bit of JSON parsing.
 
 ## 🚀 Installation
 
-Since this is a private Git dependency (or public, we don't judge), install it via:
+Install from npm (or from Git if you prefer):
 
 ```bash
-npm install git+ssh://git@github.com:YOUR_ORG/YOUR_REPO.git
+npm install @kazekaze93/repo-inquisitor
+# or
+npm install git+ssh://git@github.com:YOUR_ORG/repo-inquisitor.git
 ```
 
-The package will **automatically** attempt to set up the Python environment via the `postinstall` script. If it fails (because Python isn't installed, or you're on a restricted system, or the stars aren't aligned), you can manually trigger the setup:
-
-```bash
-node node_modules/@your-scope/your-package/scripts/install.js
-```
-
-Or if you're developing locally:
+On install, the `postinstall` hook will **try to set up Python** via `scripts/install.js`.  
+If that fails (no Python, corporate laptop, etc.), you can run it manually:
 
 ```bash
 npm run setup:python
 ```
 
-**What does it do?**
+The setup script will:
 
-1. Checks if Python 3.10+ is available in your PATH (because we're not psychic).
-2. Creates a `venv` in the project root (because global Python packages are chaos).
-3. Installs dependencies from `requirements.txt` (if it exists and isn't empty).
+1. Check that Python 3 is available in `PATH`.
+2. Create a `venv` in the project root.
+3. Install dependencies from `requirements.txt` (if/when you add them).
 
-## 🛠 Usage
+## 🛠 Usage (as a library)
 
-```TypeScript
-import { PythonBridge } from '@your-scope/your-package';
+```ts
+import { PythonBridge } from "@kazekaze93/repo-inquisitor";
 
 const bridge = new PythonBridge();
 
 async function run() {
-  try {
-    const result = await bridge.execute('some_script.py', { arg: 'value' });
-    console.log('Python says:', result);
-  } catch (error) {
-    console.error('Bridge collapse:', error);
+  const result = await bridge.executeScript(
+    "/absolute/path/to/script.py",
+    ["arg1", "arg2"]
+  );
+
+  if (result.success) {
+    console.log("Python data:", result.data);
+  } else {
+    console.error("Python error:", result.error);
   }
 }
+
+run().catch((err) => {
+  console.error("Bridge failure:", err);
+});
 ```
+
+The bridge assumes that the Python script:
+
+- Prints **logs** as normal stdout lines.
+- Prints **JSON on the last line** (parsed into `result.data`).
+
+## 🧰 Usage (CLI)
+
+After installing, you get a `inquisitor` binary on your `PATH`:
+
+```bash
+npx inquisitor <command> [...args]
+```
+
+Commands are mapped to Python scripts inside `python_src/` in `src/cli.ts`.  
+Out of the box, the map looks like this (you’re expected to adapt it to your project):
+
+- **analyze** → `python_src/analyzer.py` (you provide the script)
+- **setup** → `python_src/setup_db.py` (you provide the script)
+
+You can extend or change the map in `src/cli.ts` to wire new commands to your own Python entrypoints.
 
 ## 🐍 Requirements
 
-- **Node.js:** v18+ (because we use modern features and don't care about legacy)
-- **Python:** v3.10+ (Must be in PATH, because we're not going to hunt for it)
-- **OS:** Windows, macOS, Linux (we support all platforms, but Windows users get extra sympathy)
+- **Node.js:** v18+
+- **Python:** 3.10+ recommended, available in `PATH` as `python` (Windows) or `python3` (Unix).
+- **OS:** Works on Windows, macOS, and Linux.
 
-## 🤝 Contribution
+## 🤝 Development
 
 1. Clone the repo.
-2. Run `npm install` (installs JS deps and triggers Python setup).
+2. Run `npm install` (installs TS deps and runs Python setup).
 3. If Python setup fails, run `npm run setup:python` manually.
-4. **Don't commit `venv` or `__pycache__`.** Seriously. Don't.
+4. Build TypeScript:
 
-## ⚠️ Known Issues
+   ```bash
+   npm run build
+   ```
 
-- If Python isn't in PATH, the installation will fail. This is by design—we're not going to search your entire filesystem.
-- Windows users: Make sure `python` (not just `py`) is in your PATH, or the script will cry.
-- The venv is created in the project root. If you don't like it, modify `scripts/install.js` (but you probably won't).
+5. **Do not commit** `venv/` or `__pycache__/`.
+
+## ⚠️ Notes & Limitations
+
+- If Python is not in `PATH`, the install/setup scripts will fail fast on purpose.
+- The default CLI command mapping is intentionally minimal; treat it as a template, not a contract.
+- `requirements.txt` is currently empty on purpose—add only what you actually use.
