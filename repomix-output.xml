@@ -1,0 +1,2414 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+.gitignore
+bin/inq-audit
+bin/inq-detox
+bin/inq-review
+bin/inq-viz
+LICENSE
+package.json
+python_src/analyzer.py
+python_src/police.py
+python_src/utils/__init__.py
+python_src/utils/io_helper.py
+README.md
+requirements.txt
+scripts/install.js
+setup.sh
+src/ai/context-packer.ts
+src/ai/gen-gemini-prompt.ts
+src/analysis/anti_abstractor.cjs
+src/analysis/dependency_detox.cjs
+src/bridge.ts
+src/cli.ts
+src/index.ts
+src/reviewer/ai_reviewer.py
+src/reviewer/system_prompt.md
+src/types.ts
+src/viz/py_parser.py
+src/viz/server.cjs
+tsconfig.json
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="python_src/police.py">
+import os
+import sys
+import re
+import argparse
+
+# Boilerplate для импортов
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils.io_helper import emit_success, emit_error, emit_log
+
+# REGEX PATTERNS (Смертные грехи)
+PATTERNS = {
+    "magic_hex": r'#[0-9a-fA-F]{3,6}',  # Ищет hex цвета
+    "inline_style": r'style={{',         # Ищет инлайн стили
+    "raw_button": r'<button',            # Ищет сырые кнопки (должен быть Button)
+    "raw_input": r'<input',              # Ищет сырые инпуты (должен быть Input)
+    "class_name_string": r'className="[^"]*\s{2,}[^"]*"' # Подозрение на неформатированный CSS
+}
+
+# Исключения (например, конфиги tailwind или цвета в константах, если разрешено)
+IGNORE_FILES = ['tailwind.config.ts', 'vite.config.ts']
+
+def scan_file(filepath: str):
+    violations = []
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+            for i, line in enumerate(lines):
+                line_num = i + 1
+                
+                # Пропускаем комментарии (грубо)
+                if line.strip().startswith('//') or line.strip().startswith('/*'):
+                    continue
+
+                for code, pattern in PATTERNS.items():
+                    matches = re.findall(pattern, line)
+                    if matches:
+                        # Фильтруем ложные срабатывания (например, url(#id) в SVG)
+                        if code == "magic_hex" and ("url(" in line or "id=" in line):
+                            continue
+                            
+                        violations.append({
+                            "type": code,
+                            "line": line_num,
+                            "match": matches[0],
+                            "content": line.strip()[:50] + "..." # Превью кода
+                        })
+    except Exception as e:
+        emit_log(f"Error reading {filepath}: {str(e)}")
+        
+    return violations
+
+def inspect_codebase(target_path: str):
+    report = {
+        "total_violations": 0,
+        "files_checked": 0,
+        "files_with_violations": 0,
+        "details": {} # filepath -> list of violations
+    }
+    
+    logs = [f"👮 Starting Code Police Scan on: {target_path}"]
+
+    for root, dirs, files in os.walk(target_path):
+        # Игнор node_modules и прочего мусора
+        for ignore in ['node_modules', 'dist', 'build', '.git', 'venv']:
+            if ignore in dirs:
+                dirs.remove(ignore)
+
+        for file in files:
+            if not file.endswith('.tsx'): # Проверяем только компоненты (пока)
+                continue
+                
+            if file in IGNORE_FILES:
+                continue
+
+            report["files_checked"] += 1
+            full_path = os.path.join(root, file)
+            
+            # Относительный путь для красоты отчета
+            rel_path = os.path.relpath(full_path, target_path)
+            
+            file_violations = scan_file(full_path)
+            
+            if file_violations:
+                report["total_violations"] += len(file_violations)
+                report["files_with_violations"] += 1
+                report["details"][rel_path] = file_violations
+
+    if report["total_violations"] > 0:
+        logs.append(f"❌ FOUND {report['total_violations']} VIOLATIONS. CODEBASE IS DIRTY.")
+    else:
+        logs.append("✅ Codebase is clean. Good job, Architect.")
+
+    emit_success(data=report, logs=logs)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("target", help="Directory to scan")
+    args = parser.parse_args()
+    
+    inspect_codebase(os.path.abspath(args.target))
+</file>
+
+<file path="LICENSE">
+Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
+
+   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+
+   1. Definitions.
+
+      "License" shall mean the terms and conditions for use, reproduction,
+      and distribution as defined by Sections 1 through 9 of this document.
+
+      "Licensor" shall mean the copyright owner or entity authorized by
+      the copyright owner that is granting the License.
+
+      "Legal Entity" shall mean the union of the acting entity and all
+      other entities that control, are controlled by, or are under common
+      control with that entity. For the purposes of this definition,
+      "control" means (i) the power, direct or indirect, to cause the
+      direction or management of such entity, whether by contract or
+      otherwise, or (ii) ownership of fifty percent (50%) or more of the
+      outstanding shares, or (iii) beneficial ownership of such entity.
+
+      "You" (or "Your") shall mean an individual or Legal Entity
+      exercising permissions granted by this License.
+
+      "Source" form shall mean the preferred form for making modifications,
+      including but not limited to software source code, documentation
+      source, and configuration files.
+
+      "Object" form shall mean any form resulting from mechanical
+      transformation or translation of a Source form, including but
+      not limited to compiled object code, generated documentation,
+      and conversions to other media types.
+
+      "Work" shall mean the work of authorship, whether in Source or
+      Object form, made available under the License, as indicated by a
+      copyright notice that is included in or attached to the work
+      (an example is provided in the Appendix below).
+
+      "Derivative Works" shall mean any work, whether in Source or Object
+      form, that is based on (or derived from) the Work and for which the
+      editorial revisions, annotations, elaborations, or other modifications
+      represent, as a whole, an original work of authorship. For the purposes
+      of this License, Derivative Works shall not include works that remain
+      separable from, or merely link (or bind by name) to the interfaces of,
+      the Work and Derivative Works thereof.
+
+      "Contribution" shall mean any work of authorship, including
+      the original version of the Work and any modifications or additions
+      to that Work or Derivative Works thereof, that is intentionally
+      submitted to Licensor for inclusion in the Work by the copyright owner
+      or by an individual or Legal Entity authorized to submit on behalf of
+      the copyright owner. For the purposes of this definition, "submitted"
+      means any form of electronic, verbal, or written communication sent
+      to the Licensor or its representatives, including but not limited to
+      communication on electronic mailing lists, source code control systems,
+      and issue tracking systems that are managed by, or on behalf of, the
+      Licensor for the purpose of discussing and improving the Work, but
+      excluding communication that is conspicuously marked or otherwise
+      designated in writing by the copyright owner as "Not a Contribution."
+
+      "Contributor" shall mean Licensor and any individual or Legal Entity
+      on behalf of whom a Contribution has been received by Licensor and
+      subsequently incorporated within the Work.
+
+   2. Grant of Copyright License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      copyright license to reproduce, prepare Derivative Works of,
+      publicly display, publicly perform, sublicense, and distribute the
+      Work and such Derivative Works in Source or Object form.
+
+   3. Grant of Patent License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      (except as stated in this section) patent license to make, have made,
+      use, offer to sell, sell, import, and otherwise transfer the Work,
+      where such license applies only to those patent claims licensable
+      by such Contributor that are necessarily infringed by their
+      Contribution(s) alone or by combination of their Contribution(s)
+      with the Work to which such Contribution(s) was submitted. If You
+      institute patent litigation against any entity (including a
+      cross-claim or counterclaim in a lawsuit) alleging that the Work
+      or a Contribution incorporated within the Work constitutes direct
+      or contributory patent infringement, then any patent licenses
+      granted to You under this License for that Work shall terminate
+      as of the date such litigation is filed.
+
+   4. Redistribution. You may reproduce and distribute copies of the
+      Work or Derivative Works thereof in any medium, with or without
+      modifications, and in Source or Object form, provided that You
+      meet the following conditions:
+
+      (a) You must give any other recipients of the Work or
+          Derivative Works a copy of this License; and
+
+      (b) You must cause any modified files to carry prominent notices
+          stating that You changed the files; and
+
+      (c) You must retain, in the Source form of any Derivative Works
+          that You distribute, all copyright, patent, trademark, and
+          attribution notices from the Source form of the Work,
+          excluding those notices that do not pertain to any part of
+          the Derivative Works; and
+
+      (d) If the Work includes a "NOTICE" text file as part of its
+          distribution, then any Derivative Works that You distribute must
+          include a readable copy of the attribution notices contained
+          within such NOTICE file, excluding those notices that do not
+          pertain to any part of the Derivative Works, in at least one
+          of the following places: within a NOTICE text file distributed
+          as part of the Derivative Works; within the Source form or
+          documentation, if provided along with the Derivative Works; or,
+          within a display generated by the Derivative Works, if and
+          wherever such third-party notices normally appear. The contents
+          of the NOTICE file are for informational purposes only and
+          do not modify the License. You may add Your own attribution
+          notices within Derivative Works that You distribute, alongside
+          or as an addendum to the NOTICE text from the Work, provided
+          that such additional attribution notices cannot be construed
+          as modifying the License.
+
+      You may add Your own copyright statement to Your modifications and
+      may provide additional or different license terms and conditions
+      for use, reproduction, or distribution of Your modifications, or
+      for any such Derivative Works as a whole, provided Your use,
+      reproduction, and distribution of the Work otherwise complies with
+      the conditions stated in this License.
+
+   5. Submission of Contributions. Unless You explicitly state otherwise,
+      any Contribution intentionally submitted for inclusion in the Work
+      by You to the Licensor shall be under the terms and conditions of
+      this License, without any additional terms or conditions.
+      Notwithstanding the above, nothing herein shall supersede or modify
+      the terms of any separate license agreement you may have executed
+      with Licensor regarding such Contributions.
+
+   6. Trademarks. This License does not grant permission to use the trade
+      names, trademarks, service marks, or product names of the Licensor,
+      except as required for reasonable and customary use in describing the
+      origin of the Work and reproducing the content of the NOTICE file.
+
+   7. Disclaimer of Warranty. Unless required by applicable law or
+      agreed to in writing, Licensor provides the Work (and each
+      Contributor provides its Contributions) on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+      implied, including, without limitation, any warranties or conditions
+      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+      PARTICULAR PURPOSE. You are solely responsible for determining the
+      appropriateness of using or redistributing the Work and assume any
+      risks associated with Your exercise of permissions under this License.
+
+   8. Limitation of Liability. In no event and under no legal theory,
+      whether in tort (including negligence), contract, or otherwise,
+      unless required by applicable law (such as deliberate and grossly
+      negligent acts) or agreed to in writing, shall any Contributor be
+      liable to You for damages, including any direct, indirect, special,
+      incidental, or consequential damages of any character arising as a
+      result of this License or out of the use or inability to use the
+      Work (including but not limited to damages for loss of goodwill,
+      work stoppage, computer failure or malfunction, or any and all
+      other commercial damages or losses), even if such Contributor
+      has been advised of the possibility of such damages.
+
+   9. Accepting Warranty or Additional Liability. While redistributing
+      the Work or Derivative Works thereof, You may choose to offer,
+      and charge a fee for, acceptance of support, warranty, indemnity,
+      or other liability obligations and/or rights consistent with this
+      License. However, in accepting such obligations, You may act only
+      on Your own behalf and on Your sole responsibility, not on behalf
+      of any other Contributor, and only if You agree to indemnify,
+      defend, and hold each Contributor harmless for any liability
+      incurred by, or claims asserted against, such Contributor by reason
+      of your accepting any such warranty or additional liability.
+
+   END OF TERMS AND CONDITIONS
+
+   APPENDIX: How to apply the Apache License to your work.
+
+      To apply the Apache License to your work, attach the following
+      boilerplate notice, with the fields enclosed by brackets "[]"
+      replaced with your own identifying information. (Don't include
+      the brackets!)  The text should be enclosed in the appropriate
+      comment syntax for the file format. We also recommend that a
+      file or class name and description of purpose be included on the
+      same "printed page" as the copyright notice for easier
+      identification within third-party archives.
+
+   Copyright [yyyy] [name of copyright owner]
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+</file>
+
+<file path="python_src/analyzer.py">
+import os
+import sys
+import argparse
+
+# Добавляем текущую директорию в path, чтобы импорты работали
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from utils.io_helper import emit_success, emit_error
+
+def analyze_directory(target_path: str):
+    if not os.path.exists(target_path):
+        emit_error(f"Target path does not exist: {target_path}")
+
+    stats = {
+        "files": 0,
+        "dirs": 0,
+        "extensions": {},
+        "total_size_bytes": 0
+    }
+    
+    logs = []
+    logs.append(f"Starting analysis of: {target_path}")
+
+    try:
+        for root, dirs, files in os.walk(target_path):
+            # Skip node_modules and venv to save time/sanity
+            if 'node_modules' in dirs:
+                dirs.remove('node_modules')
+            if 'venv' in dirs:
+                dirs.remove('venv')
+            if '.git' in dirs:
+                dirs.remove('.git')
+
+            stats["dirs"] += len(dirs)
+            
+            for file in files:
+                stats["files"] += 1
+                full_path = os.path.join(root, file)
+                stats["total_size_bytes"] += os.path.getsize(full_path)
+                
+                ext = os.path.splitext(file)[1].lower() or "no_ext"
+                stats["extensions"][ext] = stats["extensions"].get(ext, 0) + 1
+
+        emit_success(data=stats, logs=logs)
+
+    except Exception as e:
+        emit_error(f"Analysis failed: {str(e)}")
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Analyze a repository")
+    # Обрати внимание: имя аргумента должно совпадать с тем, что ты передаешь в CLI
+    # Но в CLI мы передаем просто позиционные аргументы.
+    # Если ты вызываешь `inquisitor analyze .`, то '.' прилетит как аргумент.
+    parser.add_argument("target", help="Target directory to analyze")
+    
+    args = parser.parse_args()
+    
+    # Конвертируем относительный путь в абсолютный для надежности
+    abs_target = os.path.abspath(args.target)
+    
+    analyze_directory(abs_target)
+</file>
+
+<file path="src/ai/context-packer.ts">
+import * as fs from "fs";
+import * as path from "path";
+
+// === НАСТРОЙКИ (КРУТИ ЗДЕСЬ) ===
+const CONFIG = {
+  rootDir: process.cwd(),
+  outputFile: path.join(process.cwd(), ".ai", "FULL_CONTEXT.txt"),
+
+  // 1. ЧТО БЕРЕМ (Whitelist) - Самое важное
+  includeDirs: [
+    "src",
+    "electron", // Если есть отдельная папка для электрона
+    "scripts",
+  ],
+
+  // 2. ЯВНЫЕ КОРНЕВЫЕ ФАЙЛЫ
+  includeRootFiles: [
+    "package.json",
+    "tsconfig.json",
+    "vite.config.ts",
+    "electron.vite.config.ts",
+    "tailwind.config.js",
+    ".cursorrules",
+    "drizzle.config.ts",
+  ],
+
+  // 3. ЧТО ТОЧНО НЕ БЕРЕМ (Blacklist)
+  ignorePatterns: [
+    "node_modules",
+    ".git",
+    "dist",
+    "out",
+    "build",
+    ".idea",
+    ".vscode",
+    "package-lock.json",
+    "pnpm-lock.yaml",
+    "yarn.lock", // УБИЙЦЫ КОНТЕКСТА
+    "*.log",
+    "*.sqlite",
+    "*.db",
+    "components/ui", // Shadcn компоненты часто стандартные, можно игнорить или брать выборочно
+    "assets",
+    "public",
+  ],
+
+  // 4. ОГРАНИЧЕНИЯ
+  maxLinesPerFile: 300, // Если больше -> режем середину
+  maxTotalLines: 4000, // Если вышли за лимит -> паникуем (шутка, просто предупреждаем)
+};
+
+// ==========================================
+
+const isIgnored = (filePath: string): boolean => {
+  const relative = path.relative(CONFIG.rootDir, filePath);
+  // Проверка на точное совпадение с блэклистом
+  if (
+    CONFIG.ignorePatterns.some(
+      (p) => relative.includes(p) || filePath.endsWith(p)
+    )
+  )
+    return true;
+  // Если это папка, и она не в whitelist (и не корень) - игнор
+  const parts = relative.split(path.sep);
+  if (parts.length > 1 && !CONFIG.includeDirs.includes(parts[0])) return true;
+  return false;
+};
+
+const minifyAndTruncate = (content: string, filePath: string): string => {
+  let lines = content.split("\n");
+
+  // Удаляем пустые строки и однострочные комменты (опционально)
+  lines = lines.filter(
+    (l) => l.trim().length > 0 && !l.trim().startsWith("//")
+  );
+
+  if (lines.length > CONFIG.maxLinesPerFile) {
+    const head = lines.slice(0, 50).join("\n");
+    const tail = lines.slice(-50).join("\n");
+    return `${head}\n\n... [SNIPPED ${
+      lines.length - 100
+    } LINES] ...\n\n${tail}`;
+  }
+
+  return lines.join("\n");
+};
+
+const generateTree = (dir: string, prefix = ""): string => {
+  let tree = "";
+  const files = fs.readdirSync(dir);
+
+  // Упрощенная сортировка
+  files.sort((a, b) => {
+    const aStat = fs.statSync(path.join(dir, a));
+    const bStat = fs.statSync(path.join(dir, b));
+    if (aStat.isDirectory() && !bStat.isDirectory()) return -1;
+    if (!aStat.isDirectory() && bStat.isDirectory()) return 1;
+    return a.localeCompare(b);
+  });
+
+  files.forEach((file, index) => {
+    const fullPath = path.join(dir, file);
+    if (
+      CONFIG.ignorePatterns.some(
+        (p) => file === p || fullPath.includes("node_modules")
+      )
+    )
+      return; // Базовый игнор для дерева
+
+    const isLast = index === files.length - 1;
+    tree += `${prefix}${isLast ? "└── " : "├── "}${file}\n`;
+
+    if (fs.statSync(fullPath).isDirectory()) {
+      tree += generateTree(fullPath, prefix + (isLast ? "    " : "│   "));
+    }
+  });
+  return tree;
+};
+
+const run = () => {
+  console.log("🔪 Surgical Context Packer v2 starting...");
+
+  let output = `# PROJECT CONTEXT (OPTIMIZED)\nDate: ${new Date().toISOString()}\n\n`;
+  output += `## FILE TREE\n\`\`\`\n${generateTree(CONFIG.rootDir)}\n\`\`\`\n\n`;
+  output += `## CONTENT\n`;
+
+  let totalLines = 0;
+  let fileCount = 0;
+
+  // 1. Process Root Files
+  CONFIG.includeRootFiles.forEach((fileName) => {
+    const fullPath = path.join(CONFIG.rootDir, fileName);
+    if (fs.existsSync(fullPath)) {
+      const content = fs.readFileSync(fullPath, "utf-8");
+      output += `<file path="${fileName}">\n${minifyAndTruncate(
+        content,
+        fileName
+      )}\n</file>\n\n`;
+      totalLines += content.split("\n").length;
+      fileCount++;
+    }
+  });
+
+  // 2. Process Whitelisted Dirs
+  const processDir = (dirPath: string) => {
+    if (!fs.existsSync(dirPath)) return;
+    const files = fs.readdirSync(dirPath);
+
+    files.forEach((file) => {
+      const fullPath = path.join(dirPath, file);
+      const stat = fs.statSync(fullPath);
+
+      if (isIgnored(fullPath)) return;
+
+      if (stat.isDirectory()) {
+        processDir(fullPath);
+      } else {
+        // Только код
+        if (
+          ![".ts", ".tsx", ".js", ".json", ".py", ".css"].includes(
+            path.extname(file)
+          )
+        )
+          return;
+
+        const content = fs.readFileSync(fullPath, "utf-8");
+        const processed = minifyAndTruncate(content, file);
+        const relative = path.relative(CONFIG.rootDir, fullPath);
+
+        output += `<file path="${relative}">\n${processed}\n</file>\n\n`;
+        totalLines += processed.split("\n").length;
+        fileCount++;
+      }
+    });
+  };
+
+  CONFIG.includeDirs.forEach((dir) =>
+    processDir(path.join(CONFIG.rootDir, dir))
+  );
+
+  // Ensure output dir
+  const aiDir = path.dirname(CONFIG.outputFile);
+  if (!fs.existsSync(aiDir)) fs.mkdirSync(aiDir);
+
+  fs.writeFileSync(CONFIG.outputFile, output);
+
+  console.log(`✅ Done!`);
+  console.log(`   Files packed: ${fileCount}`);
+  console.log(`   Total Lines: ~${totalLines}`);
+  console.log(
+    `   Output size: ${(fs.statSync(CONFIG.outputFile).size / 1024).toFixed(
+      2
+    )} KB`
+  );
+
+  if (totalLines > CONFIG.maxTotalLines) {
+    console.warn(
+      `⚠️  WARNING: Output is still large (${totalLines} lines). Consider adding more ignores.`
+    );
+  }
+};
+
+run();
+</file>
+
+<file path="src/ai/gen-gemini-prompt.ts">
+import * as fs from "fs";
+import * as path from "path";
+
+const AI_DIR = ".ai";
+const CONTEXT_FILE = path.join(AI_DIR, "CONTEXT.md");
+const RULES_FILE = path.join(AI_DIR, "RULES.md");
+const TREE_FILE = path.join(AI_DIR, "tree.txt");
+const OUTPUT_FILE = path.join(AI_DIR, "GEMINI_PROMPT.txt");
+
+if (!fs.existsSync(TREE_FILE)) {
+  console.error(
+    '❌ Error: Tree file not found. Run "npm run ctx:update" first.'
+  );
+  process.exit(1);
+}
+
+const context = fs.existsSync(CONTEXT_FILE)
+  ? fs.readFileSync(CONTEXT_FILE, "utf-8")
+  : "# No context file found.";
+
+const rules = fs.existsSync(RULES_FILE)
+  ? fs.readFileSync(RULES_FILE, "utf-8")
+  : "";
+
+const tree = fs.readFileSync(TREE_FILE, "utf-8");
+
+const prompt = `
+=== CRITICAL INSTRUCTIONS (USER RULES) ===
+${rules ? rules : "No specific user rules defined."}
+
+=== SYSTEM CONTEXT ===
+You are an AI Architect assisting with the "RuleDesk" project.
+Here is the Master Context and File Structure. 
+MEMORIZE THIS immediately.
+
+${context}
+
+=== PROJECT STRUCTURE (Latest) ===
+${tree}
+
+=== INSTRUCTION ===
+Await my next command.
+`;
+
+fs.writeFileSync(OUTPUT_FILE, prompt);
+console.log(`✅ Ready! Content saved to "${OUTPUT_FILE}"`);
+</file>
+
+<file path="src/cli.ts">
+#!/usr/bin/env node
+// 👆 ЭТА СТРОКА ОБЯЗАТЕЛЬНА. Она говорит системе: "Запусти меня через Node".
+
+import path from "path";
+import { PythonBridge } from "./bridge";
+
+async function main() {
+  // Аргументы:
+  // [0] - node binary
+  // [1] - путь к скрипту
+  // [2] - ПЕРВЫЙ аргумент пользователя (название команды)
+  // [3...] - остальные флаги
+  const args = process.argv.slice(2);
+
+  if (args.length === 0) {
+    console.error("❌ Error: No command provided.");
+    console.error("Usage: my-tool <script-name> [args...]");
+    process.exit(1);
+  }
+
+  const commandName = args[0]; // Например: "analyze", "parse", "destroy"
+  const scriptArgs = args.slice(1); // Всё, что идет после команды
+
+  // Маппинг команд на реальные Python файлы
+  // Это защищает тебя от выполнения произвольных файлов
+  const scriptMap: Record<string, string> = {
+    analyze: "analyzer.py",
+    setup: "setup_db.py",
+    // добавь свои скрипты сюда
+  };
+
+  const scriptFile = scriptMap[commandName];
+
+  if (!scriptFile) {
+    console.error(`❌ Unknown command: "${commandName}"`);
+    console.error(`Available commands: ${Object.keys(scriptMap).join(", ")}`);
+    process.exit(1);
+  }
+
+  // Инициализируем мост
+  const bridge = new PythonBridge();
+
+  // Находим абсолютный путь к питон-скрипту внутри пакета
+  // Предполагаем, что .py лежат в папке python_src в корне пакета
+  // __dirname в продакшене будет указывать на /dist
+  const pythonScriptPath = path.resolve(
+    __dirname,
+    "..",
+    "python_src",
+    scriptFile
+  );
+
+  console.log(`🚀 Executing: ${commandName}...`);
+
+  try {
+    const result = await bridge.executeScript(pythonScriptPath, scriptArgs);
+
+    if (result.success) {
+      // Если Python вернул JSON, выводим его красиво
+      console.log(JSON.stringify(result.data, null, 2));
+    } else {
+      console.error("💥 Python Error:");
+      console.error(result.error);
+    }
+
+    // Выводим логи, если они были
+    if (result.logs && result.logs.length > 0) {
+      console.log("\n--- Logs ---");
+      result.logs.forEach((l) => console.log(l));
+    }
+
+    process.exit(result.success ? 0 : 1);
+  } catch (err) {
+    console.error("💀 Fatal Bridge Error:", err);
+    process.exit(1);
+  }
+}
+
+main();
+</file>
+
+<file path="src/index.ts">
+export { PythonBridge } from "./bridge";
+
+export * from "./types";
+</file>
+
+<file path=".gitignore">
+# Dependencies
+node_modules
+venv/
+__pycache__/
+*.pyc
+
+# Build outputs
+dist/
+out/
+build/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment vars
+.env
+.env.local
+
+# IDE
+.vscode
+.idea
+*.swp
+.git
+</file>
+
+<file path="tsconfig.json">
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "commonjs",
+    "lib": ["ES2020"],
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "moduleResolution": "node"
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
+}
+</file>
+
+<file path="bin/inq-audit">
+#!/usr/bin/env node
+// Symlink wrapper for anti_abstractor.cjs
+
+require('../src/analysis/anti_abstractor.cjs');
+</file>
+
+<file path="bin/inq-detox">
+#!/usr/bin/env node
+// Symlink wrapper for dependency_detox.cjs
+
+require('../src/analysis/dependency_detox.cjs');
+</file>
+
+<file path="bin/inq-review">
+#!/usr/bin/env node
+// Symlink wrapper for ai_reviewer.py
+// On Windows, this should be a batch file or use node to execute python
+
+const { spawn } = require('child_process');
+const path = require('path');
+
+const scriptPath = path.join(__dirname, '..', 'src', 'reviewer', 'ai_reviewer.py');
+const python = process.platform === 'win32' ? 'python' : 'python3';
+
+const child = spawn(python, [scriptPath, ...process.argv.slice(2)], {
+  stdio: 'inherit',
+  cwd: process.cwd()
+});
+
+child.on('error', (err) => {
+  console.error(`Error executing ai_reviewer.py: ${err.message}`);
+  process.exit(1);
+});
+
+child.on('exit', (code) => {
+  process.exit(code || 0);
+});
+</file>
+
+<file path="bin/inq-viz">
+#!/usr/bin/env node
+// Symlink wrapper for server.cjs
+
+require('../src/viz/server.cjs');
+</file>
+
+<file path="package.json">
+{
+  "name": "@kazekaze93/repo-inquisitor",
+  "version": "1.0.0",
+  "bin": {
+    "inquisitor": "./dist/cli.js"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "prepare": "npm run build",
+    "setup:python": "node scripts/install.js",
+    "postinstall": "node scripts/install.js",
+    "police": "police.py"
+  },
+  "files": [
+    "dist",
+    "scripts",
+    "requirements.txt",
+    "python_src",
+    "README.md"
+  ],
+  "devDependencies": {
+    "@types/node": "^25.0.3",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "repomix": "^1.11.0"
+  }
+}
+</file>
+
+<file path="python_src/utils/__init__.py">
+"""
+Python Bridge utilities package.
+"""
+
+from .io_helper import emit_success, emit_error, emit_log
+
+__all__ = ["emit_success", "emit_error", "emit_log"]
+</file>
+
+<file path="requirements.txt">
+# Python dependencies for repo-inquisitor
+</file>
+
+<file path="scripts/install.js">
+#!/usr/bin/env node
+/**
+ * Cross-platform Python environment setup script.
+ * Detects OS, checks Python availability, creates venv, and installs dependencies.
+ */
+
+const { spawn } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+
+const IS_WINDOWS = os.platform() === 'win32';
+const PYTHON_CMD = IS_WINDOWS ? 'python' : 'python3';
+const VENV_DIR = path.join(__dirname, '..', 'venv');
+const VENV_PYTHON = IS_WINDOWS 
+  ? path.join(VENV_DIR, 'Scripts', 'python.exe')
+  : path.join(VENV_DIR, 'bin', 'python');
+const REQUIREMENTS = path.join(__dirname, '..', 'requirements.txt');
+
+/**
+ * Check if Python is available in PATH.
+ * @returns {Promise<boolean>}
+ */
+function checkPython() {
+  return new Promise((resolve) => {
+    const proc = spawn(PYTHON_CMD, ['--version'], {
+      stdio: 'pipe',
+      shell: IS_WINDOWS
+    });
+
+    let output = '';
+    proc.stdout.on('data', (data) => { output += data.toString(); });
+    proc.stderr.on('data', (data) => { output += data.toString(); });
+
+    proc.on('close', (code) => {
+      if (code === 0) {
+        console.log(`✓ Found Python: ${output.trim()}`);
+        resolve(true);
+      } else {
+        console.error(`✗ Python not found. Please install Python 3.10+ and ensure it's in PATH.`);
+        resolve(false);
+      }
+    });
+
+    proc.on('error', () => {
+      console.error(`✗ Failed to execute '${PYTHON_CMD}'. Is Python installed?`);
+      resolve(false);
+    });
+  });
+}
+
+/**
+ * Create virtual environment.
+ * @returns {Promise<boolean>}
+ */
+function createVenv() {
+  return new Promise((resolve) => {
+    if (fs.existsSync(VENV_DIR)) {
+      console.log(`✓ Virtual environment already exists at ${VENV_DIR}`);
+      resolve(true);
+      return;
+    }
+
+    console.log(`Creating virtual environment at ${VENV_DIR}...`);
+    const proc = spawn(PYTHON_CMD, ['-m', 'venv', VENV_DIR], {
+      stdio: 'inherit',
+      shell: IS_WINDOWS
+    });
+
+    proc.on('close', (code) => {
+      if (code === 0) {
+        console.log(`✓ Virtual environment created`);
+        resolve(true);
+      } else {
+        console.error(`✗ Failed to create virtual environment (exit code: ${code})`);
+        resolve(false);
+      }
+    });
+
+    proc.on('error', (err) => {
+      console.error(`✗ Failed to spawn venv creation: ${err.message}`);
+      resolve(false);
+    });
+  });
+}
+
+/**
+ * Install Python dependencies from requirements.txt.
+ * @returns {Promise<boolean>}
+ */
+function installDependencies() {
+  return new Promise((resolve) => {
+    if (!fs.existsSync(REQUIREMENTS)) {
+      console.log(`⚠ requirements.txt not found, skipping dependency installation.`);
+      resolve(true);
+      return;
+    }
+
+    const requirementsContent = fs.readFileSync(REQUIREMENTS, 'utf8').trim();
+    if (!requirementsContent) {
+      console.log(`⚠ requirements.txt is empty, skipping dependency installation.`);
+      resolve(true);
+      return;
+    }
+
+    if (!fs.existsSync(VENV_PYTHON)) {
+      console.error(`✗ Virtual environment Python not found at ${VENV_PYTHON}`);
+      resolve(false);
+      return;
+    }
+
+    console.log(`Installing Python dependencies from ${REQUIREMENTS}...`);
+    const proc = spawn(VENV_PYTHON, ['-m', 'pip', 'install', '-r', REQUIREMENTS], {
+      stdio: 'inherit',
+      shell: IS_WINDOWS,
+      cwd: path.join(__dirname, '..')
+    });
+
+    proc.on('close', (code) => {
+      if (code === 0) {
+        console.log(`✓ Python dependencies installed`);
+        resolve(true);
+      } else {
+        console.error(`✗ Failed to install dependencies (exit code: ${code})`);
+        resolve(false);
+      }
+    });
+
+    proc.on('error', (err) => {
+      console.error(`✗ Failed to spawn pip install: ${err.message}`);
+      resolve(false);
+    });
+  });
+}
+
+/**
+ * Main installation flow.
+ */
+async function main() {
+  console.log('🔧 Setting up Python environment...\n');
+
+  if (!(await checkPython())) {
+    process.exit(1);
+  }
+
+  if (!(await createVenv())) {
+    process.exit(1);
+  }
+
+  if (!(await installDependencies())) {
+    process.exit(1);
+  }
+
+  console.log('\n✓ Python environment setup complete!');
+}
+
+if (require.main === module) {
+  main().catch((err) => {
+    console.error('Fatal error:', err);
+    process.exit(1);
+  });
+}
+
+module.exports = { checkPython, createVenv, installDependencies };
+</file>
+
+<file path="setup.sh">
+#!/bin/bash
+# setup.sh - Script инициализации проекта
+
+echo "Installing Node.js dependencies..."
+npm install
+
+echo "Installing Python dependencies..."
+pip install -r requirements.txt
+
+echo "Setup complete!"
+</file>
+
+<file path="src/analysis/anti_abstractor.cjs">
+/**
+ * scripts/anti_abstractor.cjs
+ * v2.0 - Умный подсчет ссылок для TypeScript
+ */
+const fs = require("fs");
+const path = require("path");
+
+const IGNORED_SUFFIXES = [
+  "Props",
+  "State",
+  "DTO",
+  "Response",
+  "Request",
+  "Params",
+  "Config",
+  "Option",
+  "Item",
+];
+const IGNORED_FILES = [".d.ts"];
+
+class AntiAbstractor {
+  constructor(rootDir) {
+    this.rootDir = rootDir;
+    this.registry = new Map();
+    this.filesContent = new Map();
+  }
+
+  scan() {
+    if (!fs.existsSync(this.rootDir)) {
+      console.error(`❌ Путь не найден: ${this.rootDir}`);
+      process.exit(1);
+    }
+
+    console.log(`🔍 Сканируем (v2) TypeScript файлы в ${this.rootDir}...`);
+
+    // Шаг 1: Читаем все файлы и ищем ОПРЕДЕЛЕНИЯ (Definitions)
+    this.walk(this.rootDir, (filePath, content) => {
+      this.findDefinitions(filePath, content);
+      this.filesContent.set(filePath, content);
+    });
+
+    console.log(
+      `📊 Найдено ${this.registry.size} сущностей. Проверяем использование...`
+    );
+
+    // Шаг 2: Проверяем ИСПОЛЬЗОВАНИЕ (Usages)
+    // Для каждой найденной сущности пробегаем по всем файлам
+    for (const [name, info] of this.registry) {
+      // Оптимизация: ищем regex только если имя достаточно уникальное
+      const regex = new RegExp(`\\b${name}\\b`, "g");
+
+      for (const [filePath, content] of this.filesContent) {
+        // Считаем количество вхождений
+        const matches = content.match(regex);
+        if (matches) {
+          info.count += matches.length;
+        }
+      }
+    }
+
+    this.judge();
+  }
+
+  walk(dir, callback) {
+    const files = fs.readdirSync(dir);
+    for (const file of files) {
+      const filePath = path.join(dir, file);
+      const stat = fs.statSync(filePath);
+
+      if (stat.isDirectory()) {
+        if (
+          file !== "node_modules" &&
+          file !== ".git" &&
+          file !== "dist" &&
+          file !== "out"
+        ) {
+          this.walk(filePath, callback);
+        }
+      } else if (file.endsWith(".ts") || file.endsWith(".tsx")) {
+        const content = fs.readFileSync(filePath, "utf-8");
+        callback(filePath, content);
+      }
+    }
+  }
+
+  findDefinitions(filePath, content) {
+    // Ищем: interface X, type X =, class X, enum X
+    // Группируем имя в [2]
+    const defRegex =
+      /(?:export\s+)?(?:interface|type|class|enum|abstract\s+class)\s+([A-Z][a-zA-Z0-9_]*)/g;
+
+    let match;
+    while ((match = defRegex.exec(content)) !== null) {
+      const name = match[1];
+
+      // Пропускаем игнорируемые суффиксы (DTO, Props...)
+      if (IGNORED_SUFFIXES.some((suffix) => name.endsWith(suffix))) continue;
+
+      // Если это d.ts файл - мы его парсим, но помечаем как "системный",
+      // чтобы не ругаться, если он используется неявно.
+
+      if (!this.registry.has(name)) {
+        this.registry.set(name, {
+          defPath: filePath,
+          count: 0,
+        });
+      }
+    }
+  }
+
+  judge() {
+    let foundGuilty = false;
+    console.log("\n--- ОТЧЕТ ИНКВИЗИЦИИ (V2) ---\n");
+
+    for (const [name, info] of this.registry) {
+      // Пропускаем .d.ts из списка "обвиняемых", так как это часто ambient types
+      if (info.defPath.endsWith(".d.ts")) continue;
+
+      // info.count включает само определение.
+      // count == 1 -> Только определен, нигде не упомянут больше.
+      // count == 2 -> Определен + 1 импорт (или использование в том же файле).
+
+      if (info.count <= 1) {
+        console.log(`💀 МЕРТВЫЙ КОД:`);
+        console.log(`   Сущность: ${name}`);
+        console.log(`   Файл: ${info.defPath}`);
+        console.log(`   Статус: 0 использований.`);
+        console.log(`   👉 \x1b[31m«Ты не Google, удали это.»\x1b[0m\n`);
+        foundGuilty = true;
+      } else if (info.count === 2 && name.startsWith("I")) {
+        // Если это интерфейс (начинается на I) и используется ровно 1 раз
+        console.log(`⚠️ ПРЕЖДЕВРЕМЕННАЯ АБСТРАКЦИЯ:`);
+        console.log(`   Интерфейс: ${name}`);
+        console.log(`   Файл: ${info.defPath}`);
+        console.log(`   Статус: Используется всего в 1 месте.`);
+        console.log(
+          `   👉 \x1b[33m«YAGNI. Зачем тебе интерфейс ради одного класса?»\x1b[0m\n`
+        );
+        foundGuilty = true;
+      }
+    }
+
+    if (!foundGuilty) {
+      console.log("✅ Теперь честно. Явного мусора не найдено.");
+    }
+  }
+}
+
+const targetDir = process.argv[2];
+if (!targetDir) {
+  console.log("Usage: node scripts/anti_abstractor.cjs <path_to_src>");
+  process.exit(1);
+}
+
+new AntiAbstractor(targetDir).scan();
+</file>
+
+<file path="src/analysis/dependency_detox.cjs">
+/**
+ * scripts/dependency_detox.cjs
+ * v2.0 - Smarter analysis for Build Tools, UI Wrappers & CLI scripts.
+ */
+const fs = require("fs");
+const path = require("path");
+const { execSync } = require("child_process");
+
+// Инструменты, которые мы не трогаем, потому что они работают "из тени" (CLI, configs)
+const SAFE_BUILD_TOOLS = [
+  "typescript",
+  "eslint",
+  "prettier",
+  "vite",
+  "electron",
+  "electron-builder",
+  "electron-vite",
+  "tailwindcss",
+  "postcss",
+  "autoprefixer",
+  "drizzle-kit",
+  "repomix",
+  "globals",
+  "@types/node",
+  "@types/react",
+  "@types/react-dom",
+  "concurrently",
+  "wait-on",
+  "cross-env",
+  "rimraf",
+  "basedpyright",
+];
+
+// Библиотеки, для которых 1 импорт - это норма (Pattern: UI Wrapper / Singleton)
+const SINGLETON_PATTERNS = [
+  "@radix-ui",
+  "@headlessui",
+  "zod",
+  "zustand",
+  "i18next",
+  "better-sqlite3",
+  "electron-log",
+  "lucide-react",
+  "clsx",
+  "tailwind-merge",
+];
+
+const SHAME_LIST = {
+  lodash: "Используй нативный JS. Ты не в 2015-м.",
+  moment: "Слишком жирный. Бери date-fns или Intl.",
+  axios: "У тебя есть fetch(). Зачем лишние 20кб?",
+  "is-odd": "Серьезно? Удаляй.",
+  uuid: "crypto.randomUUID() есть в платформе.",
+};
+
+class DependencyDetox {
+  constructor(rootDir) {
+    this.rootDir = rootDir;
+    this.srcDir = path.join(rootDir, "src");
+    this.pkgFile = path.join(rootDir, "package.json");
+    this.totalFiles = 0;
+    this.pkgData = {};
+  }
+
+  run(mode, targetPkg) {
+    if (!fs.existsSync(this.pkgFile)) {
+      console.error("❌ Нет package.json.");
+      process.exit(1);
+    }
+
+    this.pkgData = JSON.parse(fs.readFileSync(this.pkgFile, "utf-8"));
+
+    if (mode === "nuke") {
+      this.nuke(targetPkg);
+    } else {
+      this.analyze();
+    }
+  }
+
+  analyze() {
+    console.log("💊 Начинаем детоксикацию зависимостей (V2 - Smart Mode)...\n");
+
+    const deps = {
+      ...this.pkgData.dependencies,
+      ...this.pkgData.devDependencies,
+    };
+    const depNames = Object.keys(deps);
+
+    // 1. Собираем весь код из SRC
+    const fileContents = [];
+    this.walk(this.srcDir, (f, content) => {
+      fileContents.push(content);
+      this.totalFiles++;
+    });
+
+    // 2. Собираем конфиги из корня (vite.config, tailwind.config и т.д.)
+    const configContents = [];
+    const configFiles = fs
+      .readdirSync(this.rootDir)
+      .filter(
+        (f) => f.includes("config") || f.endsWith(".js") || f.endsWith(".ts")
+      );
+    configFiles.forEach((f) => {
+      if (fs.statSync(path.join(this.rootDir, f)).isFile()) {
+        configContents.push(
+          fs.readFileSync(path.join(this.rootDir, f), "utf-8")
+        );
+      }
+    });
+
+    // 3. Собираем скрипты из package.json
+    const scriptsContent = JSON.stringify(this.pkgData.scripts || {});
+
+    console.log(
+      `📂 Просканировано: ${this.totalFiles} файлов кода + конфиги + скрипты.`
+    );
+    console.log(`📦 Проверка ${depNames.length} пакетов...`);
+    console.log("-".repeat(85));
+    console.log(`| %-30s | %-10s | %-35s |`, "Package", "Usages", "Verdict");
+    console.log("-".repeat(85));
+
+    depNames.sort().forEach((dep) => {
+      // Регулярка для импорта
+      const regex = new RegExp(
+        `(?:from|require\\()\\s*['"]${dep}(?:/.*)?['"]`,
+        "g"
+      );
+      // Регулярка для простого упоминания (для конфигов и скриптов)
+      const simpleRegex = new RegExp(`${dep}`, "g");
+
+      let usages = 0;
+      let configUsages = 0;
+      let scriptUsages = 0;
+
+      // Ищем в коде
+      fileContents.forEach((c) => {
+        if (c.match(regex)) usages++;
+      });
+
+      // Ищем в конфигах (просто по имени)
+      configContents.forEach((c) => {
+        if (c.match(simpleRegex)) configUsages++;
+      });
+
+      // Ищем в скриптах npm
+      if (scriptsContent.match(simpleRegex)) scriptUsages++;
+
+      this.printVerdict(dep, usages, configUsages, scriptUsages);
+    });
+    console.log("-".repeat(85));
+  }
+
+  printVerdict(dep, usages, configUsages, scriptUsages) {
+    let verdict = "✅ OK";
+    let color = "\x1b[32m"; // Green
+    const totalRefs = usages + configUsages + scriptUsages;
+
+    // Логика оправдания
+    const isSafeTool = SAFE_BUILD_TOOLS.some((t) => dep.includes(t));
+    const isSingleton = SINGLETON_PATTERNS.some((p) => dep.startsWith(p));
+    const isSystem =
+      dep.startsWith("@types") || dep.startsWith("eslint-plugin");
+
+    if (totalRefs === 0) {
+      if (isSafeTool || isSystem) {
+        verdict = "🛡️  TOOL/SYS (Скрытое исп.)";
+        color = "\x1b[36m"; // Cyan
+      } else {
+        verdict = "👻 GHOST (Удаляй!)";
+        color = "\x1b[31m"; // Red
+      }
+    } else if (usages === 1) {
+      if (isSingleton) {
+        verdict = "💎 WRAPPER/SINGLETON (Ок)";
+        color = "\x1b[32m";
+      } else if (configUsages > 0 || scriptUsages > 0) {
+        verdict = "⚙️  CONFIGURED";
+        color = "\x1b[32m";
+      } else {
+        verdict = "⚠️ LAZY (1 usage)";
+        color = "\x1b[33m"; // Yellow
+      }
+    } else if (usages < 3 && !isSystem && !isSafeTool && !isSingleton) {
+      verdict = "⚠️ LOW USAGE";
+      color = "\x1b[33m";
+    }
+
+    if (SHAME_LIST[dep] && totalRefs > 0) {
+      verdict = `💩 SHAME: ${SHAME_LIST[dep]}`;
+      color = "\x1b[35m"; // Magenta
+    }
+
+    // Форматирование
+    const usageStr = `${usages} (src) / ${configUsages + scriptUsages} (cfg)`;
+    console.log(`${color}| %-30s | %-10s | %s\x1b[0m`, dep, usageStr, verdict);
+  }
+
+  nuke(targetPkg) {
+    if (!targetPkg) {
+      console.error(
+        "❌ Укажи пакет: node scripts/dependency_detox.cjs --nuke <pkg>"
+      );
+      process.exit(1);
+    }
+    console.log(`\n🧨 РЕЖИМ ХАОСА: Удаляем ${targetPkg}...`);
+    try {
+      execSync(`npm uninstall ${targetPkg}`, { stdio: "inherit" });
+      console.log(`🏗️  Проверка типов (быстрее, чем билд)...`);
+      // Используем tsc --noEmit для скорости, вместо full build
+      execSync("npx tsc --noEmit", { stdio: "inherit" });
+      console.log(`\n🤯 ПРОЕКТ ЖИВ! ${targetPkg} был бесполезен.`);
+    } catch (error) {
+      console.log(`\n💥 ОШИБКА. Зависимость нужна.`);
+      console.log(`🚑 Rollback...`);
+      execSync(`npm install ${targetPkg}`, { stdio: "inherit" });
+    }
+  }
+
+  walk(dir, callback) {
+    if (!fs.existsSync(dir)) return;
+    const files = fs.readdirSync(dir);
+    for (const file of files) {
+      const filePath = path.join(dir, file);
+      const stat = fs.statSync(filePath);
+      if (stat.isDirectory()) {
+        this.walk(filePath, callback);
+      } else if (/\.(ts|tsx|js|jsx)$/.test(file)) {
+        callback(filePath, fs.readFileSync(filePath, "utf-8"));
+      }
+    }
+  }
+}
+
+const args = process.argv.slice(2);
+const mode = args.includes("--nuke") ? "nuke" : "scan";
+const pkgName = args[args.indexOf("--nuke") + 1];
+
+new DependencyDetox(process.cwd()).run(mode, pkgName);
+</file>
+
+<file path="src/bridge.ts">
+import { spawn } from "child_process";
+import path from "path";
+import fs from "fs";
+import os from "os";
+import { PythonExecutionResult, BridgeOptions } from "./types";
+
+export class PythonBridge {
+  private pythonPath: string;
+
+  constructor(options: BridgeOptions = {}) {
+    this.pythonPath = options.pythonPath || this.resolvePythonPath();
+  }
+
+  private resolvePythonPath(): string {
+    const isWindows = os.platform() === "win32";
+
+    // Стратегия поиска venv:
+    // 1. Сначала смотрим в корень проекта (development mode)
+    // 2. Потом смотрим относительно dist (production/installed mode)
+    const potentialRoots = [
+      path.resolve(__dirname, ".."), // Development: src/..
+      path.resolve(__dirname, "..", ".."), // Production: dist/..
+    ];
+
+    for (const root of potentialRoots) {
+      const venvPath = isWindows
+        ? path.join(root, "venv", "Scripts", "python.exe")
+        : path.join(root, "venv", "bin", "python");
+
+      if (fs.existsSync(venvPath)) {
+        return venvPath;
+      }
+    }
+
+    // Fallback
+    return isWindows ? "python" : "python3";
+  }
+
+  // 👇 ВОТ ЭТОТ МЕТОД, КОТОРЫЙ ТЫ ПОТЕРЯЛ
+  public async executeScript<T>(
+    scriptPath: string,
+    args: string[] = []
+  ): Promise<PythonExecutionResult<T>> {
+    return new Promise((resolve) => {
+      // Защита от пробелов в путях (хотя spawn обычно справляется, но лучше проверить)
+      if (!fs.existsSync(scriptPath)) {
+        resolve({
+          success: false,
+          error: `Python script not found at path: ${scriptPath}`,
+        });
+        return;
+      }
+
+      const proc = spawn(this.pythonPath, [scriptPath, ...args]);
+
+      let stdoutData = "";
+      let stderrData = "";
+
+      proc.stdout.on("data", (data) => {
+        stdoutData += data.toString();
+      });
+
+      proc.stderr.on("data", (data) => {
+        stderrData += data.toString();
+      });
+
+      proc.on("close", (code) => {
+        const logs: string[] = [];
+        let parsedData: T | undefined;
+        let success = code === 0;
+        let error = stderrData.trim();
+
+        // Разбиваем вывод на строки
+        const lines = stdoutData
+          .trim()
+          .split("\n")
+          .filter((line) => line.length > 0);
+
+        // Пытаемся распарсить последнюю строку как JSON
+        if (lines.length > 0) {
+          const lastLine = lines[lines.length - 1];
+          try {
+            parsedData = JSON.parse(lastLine);
+            // Если успех, удаляем JSON из логов, чтобы не дублировать
+            lines.pop();
+          } catch (e) {
+            // Если последняя строка не JSON, значит скрипт вернул только текст/логи
+            // Или упал так, что даже JSON не отдал.
+            if (success) {
+              // Если код 0, но JSON нет — это странно, но не фатально, если мы не ждем данных
+              // Но для нашей архитектуры это warning
+            }
+          }
+        }
+
+        // Всё остальное — логи
+        logs.push(...lines);
+
+        resolve({
+          success,
+          data: parsedData,
+          error: success ? undefined : error,
+          logs,
+        });
+      });
+
+      proc.on("error", (err) => {
+        resolve({
+          success: false,
+          error: `Process spawn error: ${err.message}`,
+        });
+      });
+    });
+  }
+}
+</file>
+
+<file path="src/reviewer/ai_reviewer.py">
+import os
+import logging
+import sys
+import time
+import re
+from typing import Tuple, Optional
+
+import google.generativeai as genai  # type: ignore[import-untyped]
+from github import Github, GithubException, Auth  # type: ignore[import-untyped] # <--- Added Auth
+from google.api_core import exceptions as google_exceptions  # type: ignore[import-untyped]
+from google.generativeai.types import GenerationConfig  # type: ignore[import-untyped]
+
+# --- CONFIGURATION ---
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+logger = logging.getLogger(__name__)
+
+# Constants
+REVIEWABLE_EXTENSIONS = ('.ts', '.tsx', '.js', '.css', '.sql', '.py', '.md', '.json', '.yml', '.toml')
+
+# ПРАВИЛЬНЫЕ ИМЕНА МОДЕЛЕЙ (Stable)
+MODEL_PRIORITIES = [
+    "gemini-3-flash-preview",
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-2.5-pro",
+    "gemini-2.0-flash",
+    "gemini-2.0-flash-lite",
+    "gemini-2.0-pro",
+]
+
+DEFAULT_MODEL_NAME = "gemini-2.5-pro"
+
+class ReviewerError(Exception):
+    "Base class for reviewer script errors."
+    pass
+
+# Environment Variables
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+REPO_NAME = os.getenv("REPO_NAME")
+PR_NUMBER_STR = os.getenv("PR_NUMBER")
+MODEL_NAME = os.getenv("MODEL_NAME", DEFAULT_MODEL_NAME)
+
+def load_prompt() -> str:
+    "Loads the system prompt from system_prompt.md file located in the same directory."
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        prompt_path = os.path.join(script_dir, 'system_prompt.md')
+        
+        with open(prompt_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except FileNotFoundError:
+        try:
+            with open('system_prompt.md', 'r', encoding='utf-8') as f:
+                return f.read()
+        except FileNotFoundError:
+            raise ReviewerError(f"system_prompt.md not found in {script_dir} or current dir!")
+    except Exception as e:
+        raise ReviewerError(f"Error reading system_prompt.md: {e}")
+
+
+def get_pr_diff() -> Tuple[object, str]:
+    "Fetches PR diff from GitHub, filtering for relevant files."
+    if not GITHUB_TOKEN or not REPO_NAME or not PR_NUMBER_STR:
+        raise ValueError("Missing GitHub credentials or PR info.")
+    
+    try:
+        # --- FIX: UPDATED AUTHENTICATION METHOD ---
+        auth = Auth.Token(GITHUB_TOKEN)
+        g = Github(auth=auth)
+        # ------------------------------------------
+        
+        repo = g.get_repo(REPO_NAME)
+        pr = repo.get_pull(int(PR_NUMBER_STR))
+        
+        files = pr.get_files()
+        diff_content = []
+        
+        logger.info(f"Processing PR #{PR_NUMBER_STR} in {REPO_NAME}...")
+
+        for f in files:
+            if f.status == "removed":
+                continue
+            
+            if any(x in f.filename for x in ["package-lock.json", "yarn.lock", "pnpm-lock.yaml", "dist/", "out/", "build/"]):
+                continue
+
+            if f.filename.endswith(REVIEWABLE_EXTENSIONS):
+                diff_content.append(f"### File: {f.filename}\n```diff\n{f.patch}\n```")
+        
+        return pr, "\n\n".join(diff_content)
+        
+    except GithubException as e:
+        logger.error(f"GitHub API Error: {e}")
+        raise
+    except ValueError as e:
+        logger.error(f"Invalid PR number: {e}")
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error fetching PR diff: {e}")
+        raise
+
+def analyze_code(diff_text: str, system_prompt: str, model_name: str) -> Optional[str]:
+    if not GEMINI_API_KEY:
+        raise ReviewerError("GEMINI_API_KEY is missing.")
+
+    genai.configure(api_key=GEMINI_API_KEY)
+    model = genai.GenerativeModel(model_name)
+    
+    generation_config = GenerationConfig(
+        max_output_tokens=8192,
+        temperature=0.2,
+    )
+    
+    safe_prompt = f"{system_prompt}\n\n<code_diff>\n{diff_text}\n</code_diff>"
+    
+    try:
+        response = model.generate_content(safe_prompt, generation_config=generation_config)
+        return response.text
+    except google_exceptions.GoogleAPIError as e:
+        raise
+    except Exception as e:
+        raise ReviewerError(f"Unexpected error during analysis: {e}")
+
+def parse_retry_delay(error_message: str) -> Optional[float]:
+    patterns = [
+        r'retry in (\d+(?:\.\d+)?) seconds?',
+        r'retry after (\d+(?:\.\d+)?) seconds?',
+        r'wait (\d+(?:\.\d+)?) seconds?',
+        r'(\d+(?:\.\d+)?) seconds? before retry',
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, error_message.lower())
+        if match:
+            try:
+                return float(match.group(1))
+            except (ValueError, IndexError):
+                continue
+    return None
+
+def main() -> None:
+    try:
+        system_prompt = load_prompt()
+        pr, diff_text = get_pr_diff()
+        
+        if not diff_text:
+            logger.warning("No reviewable code changes found.")
+            return
+
+        # Строим список моделей. 
+        # Если MODEL_NAME передан из Env, ставим его первым, но проверяем, существует ли он
+        models_to_try = MODEL_PRIORITIES.copy()
+        
+        # Убираем проверку "если не в списке", просто добавляем, если он задан пользователем вручную
+        if MODEL_NAME and MODEL_NAME not in MODEL_PRIORITIES:
+            models_to_try.insert(0, MODEL_NAME)
+        
+        # Перемещаем приоритет на Flash, если он не первый (для скорости CI)
+        if "gemini-1.5-flash" in models_to_try and models_to_try[0] != "gemini-1.5-flash":
+             # Если хочешь экономить время и лимиты - Flash должен быть первым
+             pass 
+
+        review_comment = None
+        successful_model = None
+        last_error = None
+        
+        for model_index, model_name in enumerate(models_to_try):
+            is_primary = model_index == 0
+            
+            try:
+                if is_primary:
+                    logger.info(f"Analyzing with {model_name}...")
+                else:
+                    logger.warning(f"Switching to fallback model: {model_name}")
+                
+                review_comment = analyze_code(diff_text, system_prompt, model_name)
+                successful_model = model_name
+                logger.info(f"Successfully analyzed with {model_name}")
+                break
+                
+            except google_exceptions.GoogleAPIError as e:
+                error_message = str(e)
+                last_error = e
+                error_code = getattr(e, 'code', None)
+                
+                is_rate_limit = (
+                    error_code == 429 or 
+                    '429' in error_message or 
+                    'quota' in error_message.lower() or 
+                    'rate limit' in error_message.lower() or
+                    'resource exhausted' in error_message.lower()
+                )
+                
+                if is_rate_limit:
+                    logger.critical(f"Rate limit error with {model_name}. Attempting retry strategy...")
+                    retry_delay = parse_retry_delay(error_message)
+                    
+                    if retry_delay and retry_delay > 1.0:
+                        logger.info(f"Waiting {retry_delay}s...")
+                        time.sleep(retry_delay)
+                        try:
+                            review_comment = analyze_code(diff_text, system_prompt, model_name)
+                            successful_model = model_name
+                            break
+                        except Exception as retry_error:
+                            last_error = retry_error
+                            logger.warning(f"Retry failed for {model_name}. Switching...")
+                            continue
+                    else:
+                        continue
+                else:
+                    logger.warning(f"API Error ({model_name}): {e}. Trying next model...")
+                    continue
+        
+        if review_comment and successful_model:
+            logger.info("Posting comment to GitHub...")
+            final_comment = f"## 🛡️ Ревью Архитектора \n\n{review_comment}\n\n*Движок: {successful_model}*"
+            pr.create_issue_comment(final_comment)
+            logger.info("Done.")
+        else:
+            error_msg = f"All models failed. Last error: {last_error}" if last_error else "Analysis failed."
+            raise ReviewerError(error_msg)
+            
+    except Exception as e:
+        logger.critical(f"Fatal Error: {e}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
+</file>
+
+<file path="src/reviewer/system_prompt.md">
+Ты — Senior Software Architect проекта **NSFW Booru Client**.
+Твой стек: **Electron (Main/Renderer), React, TypeScript, Drizzle ORM, SQLite, Zustand**.
+
+Твоя задача — провести жесткое и циничное Code Review.
+Ты ненавидишь "happy path", блокировку Main-процесса, `any`, и отсутствие типизации.
+
+**ГЛАВНОЕ ПРАВИЛО: ОТВЕЧАЙ СТРОГО НА РУССКОМ ЯЗЫКЕ.**
+
+**ВАЖНО: Безопасность и Контекст**
+Ты получишь diff кода внутри тегов `<code_diff>`. Анализируй ТОЛЬКО то, что внутри.
+
+Твои красные флаги (ищи их в диффе):
+
+1. **Electron Security & IPC (КРИТИЧНО)**:
+   - **RCE**: Проверка любых данных, приходящих из Renderer. Никакого `eval` или небезопасного `innerHTML`.
+   - **Context Isolation**: Проверь, что не используется `remote` модуль (он мертв) и включен `contextIsolation: true`.
+   - **Preload Leaks**: В `bridge.ts` наружу должны торчать только методы, а не целые объекты Electron.
+
+2. **Database & Data Integrity (Drizzle ORM)**:
+   - **N+1 Queries**: Проверяй, не делаются ли запросы к БД внутри циклов. Требуй `db.query...findMany` или JOIN-ы.
+   - **Migrations**: Если меняется схема (`schema.ts`), должен быть соответствующий SQL или комментарий о миграции.
+   - **Type Safety**: Drizzle дает типы (`$inferSelect`). Если кто-то использует `any` вместо сгенерированных типов — бей по рукам.
+
+3. **Performance (Main Process)**:
+   - **Blocking the UI**: Тяжелые операции (парсинг огромных JSON, хэширование файлов) должны быть асинхронными или вынесены в Worker Threads.
+   - **Image Handling**: Никакой передачи raw-buffer картинок через IPC. Только пути к файлам или `blob:` URL.
+
+4. **React & Clean Code**:
+   - `useEffect` без массива зависимостей.
+   - Отсутствие `A11y` (доступности) на кнопках и инпутах.
+   - **Zustand**: Проверяй, не создается ли лишний ре-рендер при подписке на весь стор.
+
+**Формат ответа (Markdown):**
+
+Если код идеален:
+"LGTM 🟢. Архитектура чиста, но я слежу за тобой."
+
+Если есть проблемы:
+
+### 🚨 Критично
+[Уязвимости IPC, блокировка Main-процесса, SQL-инъекции (редко с Drizzle, но возможно через raw sql)]
+
+### ⚠️ Надо исправить
+[Производительность, N+1 запросы, типизация, A11y]
+
+### 💡 Совет
+[Оптимизация Drizzle запросов, улучшение UX, нейминг]
+
+**ПРАВИЛО ЛАКОНИЧНОСТИ:** Не переписывай файлы целиком. Показывай ТОЛЬКО измененные строки.
+</file>
+
+<file path="src/types.ts">
+export interface PythonExecutionResult<T = unknown> {
+  success: boolean;
+  data?: T;
+  error?: string;
+  logs?: string[]; // 👈 Должно быть string[]
+}
+
+export interface BridgeOptions {
+  pythonPath?: string;
+  cwd?: string;
+  env?: Record<string, string>;
+}
+</file>
+
+<file path="src/viz/py_parser.py">
+import ast
+import os
+import sys
+import json
+from pathlib import Path
+
+def get_imports(file_path):
+    imports = []
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            tree = ast.parse(f.read(), filename=file_path)
+        
+        base_dir = os.path.dirname(file_path)
+        
+        for node in ast.walk(tree):
+            # import x
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    imports.append(alias.name)
+            # from x import y
+            elif isinstance(node, ast.ImportFrom):
+                if node.module:
+                    imports.append(node.module)
+                elif node.level > 0:
+                    # Relative imports (from . import x)
+                    imports.append('.' * node.level)
+    except Exception:
+        pass # Ignore syntax errors in work-in-progress files
+    return imports
+
+def scan_project(root_dir):
+    graph = {}
+    root_path = Path(root_dir).resolve()
+
+    for root, _, files in os.walk(root_dir):
+        for file in files:
+            if file.endswith('.py') and '.venv' not in root:
+                full_path = Path(os.path.join(root, file))
+                rel_path = str(full_path.relative_to(root_path)).replace('\\', '/')
+                
+                # Анализируем импорты
+                raw_imports = get_imports(str(full_path))
+                
+                # Простая эвристика резолвинга (можно улучшить)
+                resolved_deps = []
+                for imp in raw_imports:
+                    # Если импорт похож на локальный файл
+                    possible_path = imp.replace('.', '/') + '.py'
+                    if (root_path / possible_path).exists():
+                         resolved_deps.append(possible_path)
+                    
+                    # Проверка внутри текущей директории
+                    elif (full_path.parent / possible_path).exists():
+                         # resolve relative to root
+                         dep_abs = (full_path.parent / possible_path).resolve()
+                         try:
+                             dep_rel = str(dep_abs.relative_to(root_path)).replace('\\', '/')
+                             resolved_deps.append(dep_rel)
+                         except ValueError:
+                             pass
+
+                graph[rel_path] = resolved_deps
+
+    print(json.dumps(graph))
+
+if __name__ == '__main__':
+    scan_project(sys.argv[1])
+</file>
+
+<file path="src/viz/server.cjs">
+/**
+ * scripts/viz/server.cjs
+ * v1.2 - Fix infinite connecting issue
+ */
+const express = require("express");
+const http = require("http");
+const { Server } = require("socket.io");
+const chokidar = require("chokidar");
+const madge = require("madge");
+const { spawn } = require("child_process");
+const path = require("path");
+
+const PORT = 3000;
+const ROOT_DIR = path.resolve(__dirname, "../../");
+const SRC_DIR = path.join(ROOT_DIR, "src");
+
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server);
+
+// Cache for immediate load
+let lastGraphData = null;
+
+io.on("connection", (socket) => {
+  console.log("🔌 Client connected");
+  if (lastGraphData) {
+    socket.emit("graph-data", lastGraphData);
+  } else {
+    // First build might be in progress or not started
+    buildGraph().then((data) => {
+      lastGraphData = data;
+      socket.emit("graph-data", data);
+    });
+  }
+});
+
+// --- HTML Frontend ---
+const HTML_CONTENT = `
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Code Dependency Graph</title>
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body { margin: 0; font-family: sans-serif; background: #1e1e1e; color: #ccc; overflow: hidden; }
+        #mynetwork { width: 100vw; height: 100vh; }
+        #controls { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 8px; z-index: 100; }
+        .legend-item { display: flex; align-items: center; margin-bottom: 4px; font-size: 12px; }
+        .dot { width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; }
+        button { background: #333; color: white; border: 1px solid #555; padding: 5px 10px; cursor: pointer; }
+        button:hover { background: #444; }
+        #status { font-size: 12px; color: #888; margin-top: 5px; }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <h3 style="margin-top:0">Dependency Map</h3>
+        <div class="legend-item"><div class="dot" style="background:#97C2FC"></div>TypeScript</div>
+        <div class="legend-item"><div class="dot" style="background:#FFD700"></div>Python</div>
+        <div class="legend-item"><div class="dot" style="background:#FB7E81"></div>Orphan (No deps)</div>
+        <hr style="border-color: #444;">
+        <button onclick="fitGraph()">Fit Graph</button>
+        <button onclick="togglePhysics()">Toggle Physics</button>
+        <div id="status">Connecting...</div>
+    </div>
+    <div id="mynetwork"></div>
+
+    <script>
+        const socket = io();
+        let network = null;
+        let physicsEnabled = true;
+
+        const options = {
+            nodes: { 
+                shape: 'dot', 
+                size: 16,
+                font: { color: '#ffffff', size: 14, strokeWidth: 2, strokeColor: '#000000' }
+            },
+            edges: {
+                color: { color: '#555555', highlight: '#00ff00' },
+                arrows: { to: { enabled: true, scaleFactor: 0.5 } },
+                smooth: { type: 'continuous' }
+            },
+            physics: {
+                stabilization: false,
+                barnesHut: { gravitationalConstant: -2000, springConstant: 0.04, springLength: 95 }
+            },
+            layout: { randomSeed: 2 }
+        };
+
+        socket.on('graph-data', (data) => {
+            const statusEl = document.getElementById('status');
+            if(statusEl) statusEl.innerText = 'Nodes: ' + data.nodes.length;
+            drawGraph(data.nodes, data.edges);
+        });
+
+        function drawGraph(nodesData, edgesData) {
+            const container = document.getElementById('mynetwork');
+            const data = { nodes: new vis.DataSet(nodesData), edges: new vis.DataSet(edgesData) };
+            
+            if (!network) {
+                network = new vis.Network(container, data, options);
+                network.on("click", function (params) {
+                    if (params.nodes.length > 0) {
+                        console.log("Selected:", params.nodes[0]);
+                    }
+                });
+            } else {
+                network.setData(data);
+            }
+        }
+
+        function fitGraph() { network.fit(); }
+        function togglePhysics() {
+            physicsEnabled = !physicsEnabled;
+            network.setOptions({ physics: physicsEnabled });
+        }
+    </script>
+</body>
+</html>
+`;
+
+app.get("/", (req, res) => res.send(HTML_CONTENT));
+
+// --- ANALYZER LOGIC ---
+
+async function getTSGraph() {
+  try {
+    const res = await madge(SRC_DIR, {
+      fileExtensions: ["ts", "tsx"],
+      tsConfig: path.join(ROOT_DIR, "tsconfig.json"),
+    });
+    return res.obj();
+  } catch (e) {
+    console.error("Madge Error:", e);
+    return {};
+  }
+}
+
+function getPyGraph() {
+  return new Promise((resolve) => {
+    const pyScript = path.join(__dirname, "py_parser.py");
+    const pythonProcess = spawn("python", [pyScript, SRC_DIR]);
+
+    let data = "";
+    pythonProcess.stdout.on("data", (chunk) => (data += chunk));
+
+    pythonProcess.on("close", (code) => {
+      try {
+        resolve(JSON.parse(data));
+      } catch (e) {
+        console.error("Python parse error (JSON)");
+        resolve({});
+      }
+    });
+  });
+}
+
+async function buildGraph() {
+  console.log("🔄 Rebuilding graph...");
+  const [tsDeps, pyDeps] = await Promise.all([getTSGraph(), getPyGraph()]);
+
+  const nodes = [];
+  const edges = [];
+  const nodeSet = new Set();
+
+  const addNode = (id, type) => {
+    if (!nodeSet.has(id)) {
+      let color = type === "ts" ? "#97C2FC" : "#FFD700";
+      nodes.push({
+        id,
+        label: path.basename(id),
+        title: id,
+        color: color,
+        group: type,
+      });
+      nodeSet.add(id);
+    }
+  };
+
+  for (const [file, deps] of Object.entries(tsDeps)) {
+    addNode(file, "ts");
+    deps.forEach((dep) => {
+      addNode(dep, "ts");
+      edges.push({ from: file, to: dep });
+    });
+  }
+
+  for (const [file, deps] of Object.entries(pyDeps)) {
+    addNode(file, "py");
+    deps.forEach((dep) => {
+      addNode(dep, "py");
+      edges.push({ from: file, to: dep });
+    });
+  }
+
+  nodes.forEach((n) => {
+    const hasEdges = edges.some((e) => e.from === n.id || e.to === n.id);
+    if (!hasEdges) n.color = "#FB7E81";
+  });
+
+  return { nodes, edges };
+}
+
+// --- INITIALIZATION ---
+
+let debounceTimer;
+const triggerUpdate = () => {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(async () => {
+    const data = await buildGraph();
+    lastGraphData = data; // Cache it!
+    io.emit("graph-data", data);
+    console.log(`✅ Graph updated: ${data.nodes.length} nodes`);
+  }, 1000);
+};
+
+chokidar
+  .watch(SRC_DIR, { ignored: /node_modules|\.git|dist|out/ })
+  .on("all", (event, path) => {
+    if (path.endsWith(".ts") || path.endsWith(".tsx") || path.endsWith(".py")) {
+      triggerUpdate();
+    }
+  });
+
+const start = async () => {
+  try {
+    const { default: open } = await import("open");
+
+    server.listen(PORT, () => {
+      console.log(`🚀 Visualizer running at http://localhost:${PORT}`);
+      open(`http://localhost:${PORT}`);
+      triggerUpdate(); // First run
+    });
+  } catch (err) {
+    console.error("Failed to start server:", err);
+  }
+};
+
+start();
+</file>
+
+<file path="README.md">
+## 📦 Repo Inquisitor
+
+> **Hybrid Node + Python toolkit for poking at repositories.**  
+> TypeScript on the outside, Python on the inside.
+
+`@kazekaze93/repo-inquisitor` is a small core library and CLI that:
+
+- **Bridges Node ↔ Python** via a thin `child_process` wrapper (`PythonBridge`).
+- **Bootstraps a Python venv** on install (`scripts/install.js` + `requirements.txt`).
+- Exposes a **CLI entrypoint** `inquisitor` that delegates to Python scripts in `python_src`.
+- Ships a few **internal helpers** (analysis/viz/reviewer/AI context tooling) used by higher-level tools.
+
+The goal is to keep the integration minimal and explicit, not to build Yet Another Framework™.
+
+## 🏗 Architecture
+
+- **Node side:** TypeScript, compiled to `dist/`. Public surface is in `src/index.ts`.
+- **Python side:** Plain Python scripts in `python_src/` (and subpackages), executed as child processes.
+- **Bridge:** `PythonBridge` looks for a local `venv` first, then falls back to `python`/`python3` in `PATH`.
+- **CLI:** `bin.inquisitor -> dist/cli.js` → resolves a command → picks a Python script → runs it via the bridge.
+
+No hidden daemons, no sockets, just `spawn(python, script.py, args...)` and a bit of JSON parsing.
+
+## 🚀 Installation
+
+Install from npm (or from Git if you prefer):
+
+```bash
+npm install @kazekaze93/repo-inquisitor
+# or
+npm install git+ssh://git@github.com:YOUR_ORG/repo-inquisitor.git
+```
+
+On install, the `postinstall` hook will **try to set up Python** via `scripts/install.js`.  
+If that fails (no Python, corporate laptop, etc.), you can run it manually:
+
+```bash
+npm run setup:python
+```
+
+The setup script will:
+
+1. Check that Python 3 is available in `PATH`.
+2. Create a `venv` in the project root.
+3. Install dependencies from `requirements.txt` (if/when you add them).
+
+## 🛠 Usage (as a library)
+
+```ts
+import { PythonBridge } from "@kazekaze93/repo-inquisitor";
+
+const bridge = new PythonBridge();
+
+async function run() {
+  const result = await bridge.executeScript("/absolute/path/to/script.py", [
+    "arg1",
+    "arg2",
+  ]);
+
+  if (result.success) {
+    console.log("Python data:", result.data);
+  } else {
+    console.error("Python error:", result.error);
+  }
+}
+
+run().catch((err) => {
+  console.error("Bridge failure:", err);
+});
+```
+
+The bridge assumes that the Python script:
+
+- Prints **logs** as normal stdout lines.
+- Prints **JSON on the last line** (parsed into `result.data`).
+
+## 🧰 Usage (CLI)
+
+After installing, you get a `inquisitor` binary on your `PATH`:
+
+```bash
+npx inquisitor <command> [...args]
+```
+
+Commands are mapped to Python scripts inside `python_src/` in `src/cli.ts`.  
+Out of the box, the map looks like this (you’re expected to adapt it to your project):
+
+- **analyze** → `python_src/analyzer.py` (you provide the script)
+- **setup** → `python_src/setup_db.py` (you provide the script)
+
+You can extend or change the map in `src/cli.ts` to wire new commands to your own Python entrypoints.
+
+## 🐍 Requirements
+
+- **Node.js:** v18+
+- **Python:** 3.10+ recommended, available in `PATH` as `python` (Windows) or `python3` (Unix).
+- **OS:** Works on Windows, macOS, and Linux.
+
+## 🤝 Development
+
+1. Clone the repo.
+2. Run `npm install` (installs TS deps and runs Python setup).
+3. If Python setup fails, run `npm run setup:python` manually.
+4. Build TypeScript:
+
+   ```bash
+   npm run build
+   ```
+
+5. **Do not commit** `venv/` or `__pycache__/`.
+
+## ⚠️ Notes & Limitations
+
+- If Python is not in `PATH`, the install/setup scripts will fail fast on purpose.
+- The default CLI command mapping is intentionally minimal; treat it as a template, not a contract.
+- `requirements.txt` is currently empty on purpose—add only what you actually use.
+</file>
+
+<file path="python_src/utils/io_helper.py">
+import sys
+import json
+from typing import Any, List, Optional
+
+def emit_log(message: str):
+    """
+    Prints a log message to stdout. 
+    Node.js bridge captures this as a log line (non-JSON).
+    """
+    print(message)
+    sys.stdout.flush()
+
+def emit_success(data: Any = None, logs: Optional[List[str]] = None):
+    """
+    Finalizes execution by printing a JSON object to the last line of stdout.
+    Exits with code 0.
+    """
+    # Если передали накопленные логи массивом — выводим их перед JSON
+    if logs:
+        for log in logs:
+            print(log)
+            
+    response = {
+        "status": "success",
+        "data": data
+    }
+    # Flush stdout to ensure previous prints are handled
+    sys.stdout.flush()
+    # Print JSON strictly on the last line
+    print(json.dumps(response))
+    sys.exit(0)
+
+def emit_error(message: str, details: Any = None):
+    """
+    Finalizes execution with an error state.
+    Exits with code 1.
+    """
+    # Пишем в stderr, чтобы Node.js мог отличить поток ошибок
+    sys.stderr.write(message + "\n")
+    if details:
+        sys.stderr.write(json.dumps(details) + "\n")
+    sys.exit(1)
+</file>
+
+</files>

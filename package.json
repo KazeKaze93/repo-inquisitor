@@ -17,10 +17,14 @@
     "scripts",
     "requirements.txt",
     "python_src",
+    "src",
     "README.md"
   ],
   "devDependencies": {
     "@types/node": "^25.0.3",
     "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "repomix": "^1.11.0"
   }
 }

@@ -2,7 +2,6 @@ import os
 import sys
 import argparse
 
-# Добавляем текущую директорию в path, чтобы импорты работали
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.io_helper import emit_success, emit_error
@@ -23,7 +22,6 @@ def analyze_directory(target_path: str):
 
     try:
         for root, dirs, files in os.walk(target_path):
-            # Skip node_modules and venv to save time/sanity
             if 'node_modules' in dirs:
                 dirs.remove('node_modules')
             if 'venv' in dirs:
@@ -48,14 +46,10 @@ def analyze_directory(target_path: str):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Analyze a repository")
-    # Обрати внимание: имя аргумента должно совпадать с тем, что ты передаешь в CLI
-    # Но в CLI мы передаем просто позиционные аргументы.
-    # Если ты вызываешь `inquisitor analyze .`, то '.' прилетит как аргумент.
     parser.add_argument("target", help="Target directory to analyze")
     
     args = parser.parse_args()
     
-    # Конвертируем относительный путь в абсолютный для надежности
     abs_target = os.path.abspath(args.target)
     
     analyze_directory(abs_target)

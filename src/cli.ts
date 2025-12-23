@@ -1,78 +1,130 @@
 #!/usr/bin/env node
-// 👆 ЭТА СТРОКА ОБЯЗАТЕЛЬНА. Она говорит системе: "Запусти меня через Node".
-
 import path from "path";
+import { fork } from "child_process";
 import { PythonBridge } from "./bridge";
 
+type CommandType = "python" | "node";
+
+interface CommandDef {
+  type: CommandType;
+  file: string; // Relative to package root
+  description: string;
+}
+
+const COMMANDS: Record<string, CommandDef> = {
+  analyze: {
+    type: "python",
+    file: "python_src/analyzer.py",
+    description: "Analyze file statistics and types (Python)",
+  },
+  police: {
+    type: "python",
+    file: "python_src/police.py",
+    description: "Scan for forbidden patterns & styles (Python)",
+  },
+  audit: {
+    type: "node",
+    file: "src/analysis/anti_abstractor.cjs",
+    description: "Find dead code and over-abstractions (Node)",
+  },
+  detox: {
+    type: "node",
+    file: "src/analysis/dependency_detox.cjs",
+    description: "Analyze and clean unused dependencies (Node)",
+  },
+  viz: {
+    type: "node",
+    file: "src/viz/server.cjs",
+    description: "Start interactive dependency visualizer (Node)",
+  },
+};
+
+function printHelp() {
+  console.log(`
+🕵️  \x1b[1mREPO INQUISITOR\x1b[0m - The Hybrid Audit Tool
+
+\x1b[33mUsage:\x1b[0m
+  inquisitor <command> [arguments]
+
+\x1b[33mCommands:\x1b[0m`);
+
+  const maxLen = Math.max(...Object.keys(COMMANDS).map((k) => k.length));
+
+  for (const [name, def] of Object.entries(COMMANDS)) {
+    const paddedName = name.padEnd(maxLen + 2);
+    const icon = def.type === "python" ? "🐍" : "🟢";
+    console.log(`  ${paddedName} ${icon} ${def.description}`);
+  }
+
+  console.log(`
+\x1b[33mExamples:\x1b[0m
+  inquisitor analyze ./src
+  inquisitor police ./components
+  inquisitor viz
+`);
+}
+
 async function main() {
-  // Аргументы:
-  // [0] - node binary
-  // [1] - путь к скрипту
-  // [2] - ПЕРВЫЙ аргумент пользователя (название команды)
-  // [3...] - остальные флаги
   const args = process.argv.slice(2);
+  const commandName = args[0];
 
-  if (args.length === 0) {
-    console.error("❌ Error: No command provided.");
-    console.error("Usage: my-tool <script-name> [args...]");
-    process.exit(1);
+  if (!commandName || args.includes("--help") || args.includes("-h")) {
+    printHelp();
+    process.exit(0);
   }
 
-  const commandName = args[0]; // Например: "analyze", "parse", "destroy"
-  const scriptArgs = args.slice(1); // Всё, что идет после команды
-
-  // Маппинг команд на реальные Python файлы
-  // Это защищает тебя от выполнения произвольных файлов
-  const scriptMap: Record<string, string> = {
-    analyze: "analyzer.py",
-    setup: "setup_db.py",
-    // добавь свои скрипты сюда
-  };
-
-  const scriptFile = scriptMap[commandName];
-
-  if (!scriptFile) {
+  const command = COMMANDS[commandName];
+  if (!command) {
     console.error(`❌ Unknown command: "${commandName}"`);
-    console.error(`Available commands: ${Object.keys(scriptMap).join(", ")}`);
+    console.error(`Run "inquisitor --help" to see available commands.`);
     process.exit(1);
   }
 
-  // Инициализируем мост
-  const bridge = new PythonBridge();
+  const scriptArgs = args.slice(1);
+  const projectRoot = path.resolve(__dirname, ".."); // Up from dist/ to root
 
-  // Находим абсолютный путь к питон-скрипту внутри пакета
-  // Предполагаем, что .py лежат в папке python_src в корне пакета
-  // __dirname в продакшене будет указывать на /dist
-  const pythonScriptPath = path.resolve(
-    __dirname,
-    "..",
-    "python_src",
-    scriptFile
+  console.log(
+    `🚀 Executing \x1b[36m${commandName}\x1b[0m [${command.type}]...`
   );
 
-  console.log(`🚀 Executing: ${commandName}...`);
+  if (command.type === "python") {
+    const bridge = new PythonBridge();
+    const scriptPath = path.join(projectRoot, command.file);
 
-  try {
-    const result = await bridge.executeScript(pythonScriptPath, scriptArgs);
+    try {
+      const result = await bridge.executeScript(scriptPath, scriptArgs);
 
-    if (result.success) {
-      // Если Python вернул JSON, выводим его красиво
-      console.log(JSON.stringify(result.data, null, 2));
-    } else {
-      console.error("💥 Python Error:");
-      console.error(result.error);
+      if (result.logs && result.logs.length > 0) {
+        console.log("\n--- Logs ---");
+        result.logs.forEach((l) => console.log(l));
+      }
+
+      if (result.success) {
+        if (result.data) {
+          console.log("\n--- Result ---");
+          console.log(JSON.stringify(result.data, null, 2));
+        }
+      } else {
+        console.error("\n💥 Python Error:");
+        console.error(result.error);
+        process.exit(1);
+      }
+    } catch (err) {
+      console.error("💀 Bridge Crash:", err);
+      process.exit(1);
     }
+  } else {
+    const scriptPath = path.join(projectRoot, command.file);
 
-    // Выводим логи, если они были
-    if (result.logs && result.logs.length > 0) {
-      console.log("\n--- Logs ---");
-      result.logs.forEach((l) => console.log(l));
-    }
+    // Forking allows the script to have its own process.argv and isolation
+    const child = fork(scriptPath, scriptArgs, {
+      stdio: "inherit",
+      env: { ...process.env, FORCE_COLOR: "1" },
+    });
 
-    process.exit(result.success ? 0 : 1);
-  } catch (err) {
-    console.error("💀 Fatal Bridge Error:", err);
-    process.exit(1);
+    child.on("exit", (code) => {
+      process.exit(code ?? 0);
+    });
   }
 }
 

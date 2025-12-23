@@ -1,7 +1,3 @@
-/**
- * scripts/viz/server.cjs
- * v1.2 - Fix infinite connecting issue
- */
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
@@ -18,7 +14,6 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// Cache for immediate load
 let lastGraphData = null;
 
 io.on("connection", (socket) => {
@@ -34,7 +29,6 @@ io.on("connection", (socket) => {
   }
 });
 
-// --- HTML Frontend ---
 const HTML_CONTENT = `
 <!DOCTYPE html>
 <html>
@@ -123,8 +117,6 @@ const HTML_CONTENT = `
 
 app.get("/", (req, res) => res.send(HTML_CONTENT));
 
-// --- ANALYZER LOGIC ---
-
 async function getTSGraph() {
   try {
     const res = await madge(SRC_DIR, {
@@ -203,14 +195,12 @@ async function buildGraph() {
   return { nodes, edges };
 }
 
-// --- INITIALIZATION ---
-
 let debounceTimer;
 const triggerUpdate = () => {
   clearTimeout(debounceTimer);
   debounceTimer = setTimeout(async () => {
     const data = await buildGraph();
-    lastGraphData = data; // Cache it!
+    lastGraphData = data;
     io.emit("graph-data", data);
     console.log(`✅ Graph updated: ${data.nodes.length} nodes`);
   }, 1000);
@@ -239,5 +229,3 @@ const start = async () => {
 };
 
 start();
-
-

@@ -1,12 +1,7 @@
-/**
- * scripts/dependency_detox.cjs
- * v2.0 - Smarter analysis for Build Tools, UI Wrappers & CLI scripts.
- */
 const fs = require("fs");
 const path = require("path");
 const { execSync } = require("child_process");
 
-// Инструменты, которые мы не трогаем, потому что они работают "из тени" (CLI, configs)
 const SAFE_BUILD_TOOLS = [
   "typescript",
   "eslint",
@@ -31,7 +26,6 @@ const SAFE_BUILD_TOOLS = [
   "basedpyright",
 ];
 
-// Библиотеки, для которых 1 импорт - это норма (Pattern: UI Wrapper / Singleton)
 const SINGLETON_PATTERNS = [
   "@radix-ui",
   "@headlessui",
@@ -86,14 +80,12 @@ class DependencyDetox {
     };
     const depNames = Object.keys(deps);
 
-    // 1. Собираем весь код из SRC
     const fileContents = [];
     this.walk(this.srcDir, (f, content) => {
       fileContents.push(content);
       this.totalFiles++;
     });
 
-    // 2. Собираем конфиги из корня (vite.config, tailwind.config и т.д.)
     const configContents = [];
     const configFiles = fs
       .readdirSync(this.rootDir)
@@ -108,7 +100,6 @@ class DependencyDetox {
       }
     });
 
-    // 3. Собираем скрипты из package.json
     const scriptsContent = JSON.stringify(this.pkgData.scripts || {});
 
     console.log(
@@ -120,29 +111,24 @@ class DependencyDetox {
     console.log("-".repeat(85));
 
     depNames.sort().forEach((dep) => {
-      // Регулярка для импорта
       const regex = new RegExp(
         `(?:from|require\\()\\s*['"]${dep}(?:/.*)?['"]`,
         "g"
       );
-      // Регулярка для простого упоминания (для конфигов и скриптов)
       const simpleRegex = new RegExp(`${dep}`, "g");
 
       let usages = 0;
       let configUsages = 0;
       let scriptUsages = 0;
 
-      // Ищем в коде
       fileContents.forEach((c) => {
         if (c.match(regex)) usages++;
       });
 
-      // Ищем в конфигах (просто по имени)
       configContents.forEach((c) => {
         if (c.match(simpleRegex)) configUsages++;
       });
 
-      // Ищем в скриптах npm
       if (scriptsContent.match(simpleRegex)) scriptUsages++;
 
       this.printVerdict(dep, usages, configUsages, scriptUsages);
@@ -155,7 +141,6 @@ class DependencyDetox {
     let color = "\x1b[32m"; // Green
     const totalRefs = usages + configUsages + scriptUsages;
 
-    // Логика оправдания
     const isSafeTool = SAFE_BUILD_TOOLS.some((t) => dep.includes(t));
     const isSingleton = SINGLETON_PATTERNS.some((p) => dep.startsWith(p));
     const isSystem =
@@ -187,10 +172,9 @@ class DependencyDetox {
 
     if (SHAME_LIST[dep] && totalRefs > 0) {
       verdict = `💩 SHAME: ${SHAME_LIST[dep]}`;
-      color = "\x1b[35m"; // Magenta
+      color = "\x1b[35m";
     }
 
-    // Форматирование
     const usageStr = `${usages} (src) / ${configUsages + scriptUsages} (cfg)`;
     console.log(`${color}| %-30s | %-10s | %s\x1b[0m`, dep, usageStr, verdict);
   }
@@ -206,7 +190,6 @@ class DependencyDetox {
     try {
       execSync(`npm uninstall ${targetPkg}`, { stdio: "inherit" });
       console.log(`🏗️  Проверка типов (быстрее, чем билд)...`);
-      // Используем tsc --noEmit для скорости, вместо full build
       execSync("npx tsc --noEmit", { stdio: "inherit" });
       console.log(`\n🤯 ПРОЕКТ ЖИВ! ${targetPkg} был бесполезен.`);
     } catch (error) {
@@ -236,5 +219,3 @@ const mode = args.includes("--nuke") ? "nuke" : "scan";
 const pkgName = args[args.indexOf("--nuke") + 1];
 
 new DependencyDetox(process.cwd()).run(mode, pkgName);
-
-

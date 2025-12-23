@@ -1,19 +1,16 @@
 import * as fs from "fs";
 import * as path from "path";
 
-// === НАСТРОЙКИ (КРУТИ ЗДЕСЬ) ===
 const CONFIG = {
   rootDir: process.cwd(),
   outputFile: path.join(process.cwd(), ".ai", "FULL_CONTEXT.txt"),
 
-  // 1. ЧТО БЕРЕМ (Whitelist) - Самое важное
   includeDirs: [
     "src",
     "electron", // Если есть отдельная папка для электрона
     "scripts",
   ],
 
-  // 2. ЯВНЫЕ КОРНЕВЫЕ ФАЙЛЫ
   includeRootFiles: [
     "package.json",
     "tsconfig.json",
@@ -24,7 +21,6 @@ const CONFIG = {
     "drizzle.config.ts",
   ],
 
-  // 3. ЧТО ТОЧНО НЕ БЕРЕМ (Blacklist)
   ignorePatterns: [
     "node_modules",
     ".git",
@@ -35,7 +31,7 @@ const CONFIG = {
     ".vscode",
     "package-lock.json",
     "pnpm-lock.yaml",
-    "yarn.lock", // УБИЙЦЫ КОНТЕКСТА
+    "yarn.lock",
     "*.log",
     "*.sqlite",
     "*.db",
@@ -44,23 +40,18 @@ const CONFIG = {
     "public",
   ],
 
-  // 4. ОГРАНИЧЕНИЯ
-  maxLinesPerFile: 300, // Если больше -> режем середину
-  maxTotalLines: 4000, // Если вышли за лимит -> паникуем (шутка, просто предупреждаем)
+  maxLinesPerFile: 300,
+  maxTotalLines: 4000,
 };
-
-// ==========================================
 
 const isIgnored = (filePath: string): boolean => {
   const relative = path.relative(CONFIG.rootDir, filePath);
-  // Проверка на точное совпадение с блэклистом
   if (
     CONFIG.ignorePatterns.some(
       (p) => relative.includes(p) || filePath.endsWith(p)
     )
-  )
+    )
     return true;
-  // Если это папка, и она не в whitelist (и не корень) - игнор
   const parts = relative.split(path.sep);
   if (parts.length > 1 && !CONFIG.includeDirs.includes(parts[0])) return true;
   return false;
@@ -69,7 +60,6 @@ const isIgnored = (filePath: string): boolean => {
 const minifyAndTruncate = (content: string, filePath: string): string => {
   let lines = content.split("\n");
 
-  // Удаляем пустые строки и однострочные комменты (опционально)
   lines = lines.filter(
     (l) => l.trim().length > 0 && !l.trim().startsWith("//")
   );
@@ -89,7 +79,6 @@ const generateTree = (dir: string, prefix = ""): string => {
   let tree = "";
   const files = fs.readdirSync(dir);
 
-  // Упрощенная сортировка
   files.sort((a, b) => {
     const aStat = fs.statSync(path.join(dir, a));
     const bStat = fs.statSync(path.join(dir, b));
@@ -127,7 +116,6 @@ const run = () => {
   let totalLines = 0;
   let fileCount = 0;
 
-  // 1. Process Root Files
   CONFIG.includeRootFiles.forEach((fileName) => {
     const fullPath = path.join(CONFIG.rootDir, fileName);
     if (fs.existsSync(fullPath)) {
@@ -141,7 +129,6 @@ const run = () => {
     }
   });
 
-  // 2. Process Whitelisted Dirs
   const processDir = (dirPath: string) => {
     if (!fs.existsSync(dirPath)) return;
     const files = fs.readdirSync(dirPath);
@@ -155,7 +142,6 @@ const run = () => {
       if (stat.isDirectory()) {
         processDir(fullPath);
       } else {
-        // Только код
         if (
           ![".ts", ".tsx", ".js", ".json", ".py", ".css"].includes(
             path.extname(file)
@@ -178,7 +164,6 @@ const run = () => {
     processDir(path.join(CONFIG.rootDir, dir))
   );
 
-  // Ensure output dir
   const aiDir = path.dirname(CONFIG.outputFile);
   if (!fs.existsSync(aiDir)) fs.mkdirSync(aiDir);
 

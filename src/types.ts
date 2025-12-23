@@ -2,7 +2,7 @@ export interface PythonExecutionResult<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;
-  logs?: string[]; // 👈 Должно быть string[]
+  logs?: string[];
 }
 
 export interface BridgeOptions {

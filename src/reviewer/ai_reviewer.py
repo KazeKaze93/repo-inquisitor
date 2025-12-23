@@ -6,11 +6,10 @@ import re
 from typing import Tuple, Optional
 
 import google.generativeai as genai  # type: ignore[import-untyped]
-from github import Github, GithubException, Auth  # type: ignore[import-untyped] # <--- Added Auth
+from github import Github, GithubException, Auth  # type: ignore[import-untyped]
 from google.api_core import exceptions as google_exceptions  # type: ignore[import-untyped]
 from google.generativeai.types import GenerationConfig  # type: ignore[import-untyped]
 
-# --- CONFIGURATION ---
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -18,10 +17,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Constants
 REVIEWABLE_EXTENSIONS = ('.ts', '.tsx', '.js', '.css', '.sql', '.py', '.md', '.json', '.yml', '.toml')
 
-# ПРАВИЛЬНЫЕ ИМЕНА МОДЕЛЕЙ (Stable)
 MODEL_PRIORITIES = [
     "gemini-3-flash-preview",
     "gemini-2.5-flash",
@@ -38,7 +35,6 @@ class ReviewerError(Exception):
     "Base class for reviewer script errors."
     pass
 
-# Environment Variables
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 REPO_NAME = os.getenv("REPO_NAME")
@@ -69,10 +65,8 @@ def get_pr_diff() -> Tuple[object, str]:
         raise ValueError("Missing GitHub credentials or PR info.")
     
     try:
-        # --- FIX: UPDATED AUTHENTICATION METHOD ---
         auth = Auth.Token(GITHUB_TOKEN)
         g = Github(auth=auth)
-        # ------------------------------------------
         
         repo = g.get_repo(REPO_NAME)
         pr = repo.get_pull(int(PR_NUMBER_STR))
@@ -152,18 +146,10 @@ def main() -> None:
             logger.warning("No reviewable code changes found.")
             return
 
-        # Строим список моделей. 
-        # Если MODEL_NAME передан из Env, ставим его первым, но проверяем, существует ли он
         models_to_try = MODEL_PRIORITIES.copy()
         
-        # Убираем проверку "если не в списке", просто добавляем, если он задан пользователем вручную
         if MODEL_NAME and MODEL_NAME not in MODEL_PRIORITIES:
-            models_to_try.insert(0, MODEL_NAME)
-        
-        # Перемещаем приоритет на Flash, если он не первый (для скорости CI)
-        if "gemini-1.5-flash" in models_to_try and models_to_try[0] != "gemini-1.5-flash":
-             # Если хочешь экономить время и лимиты - Flash должен быть первым
-             pass 
+            models_to_try.insert(0, MODEL_NAME) 
 
         review_comment = None
         successful_model = None
@@ -232,4 +218,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
