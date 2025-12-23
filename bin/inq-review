@@ -1,0 +1,24 @@
+#!/usr/bin/env node
+// Symlink wrapper for ai_reviewer.py
+// On Windows, this should be a batch file or use node to execute python
+
+const { spawn } = require('child_process');
+const path = require('path');
+
+const scriptPath = path.join(__dirname, '..', 'src', 'reviewer', 'ai_reviewer.py');
+const python = process.platform === 'win32' ? 'python' : 'python3';
+
+const child = spawn(python, [scriptPath, ...process.argv.slice(2)], {
+  stdio: 'inherit',
+  cwd: process.cwd()
+});
+
+child.on('error', (err) => {
+  console.error(`Error executing ai_reviewer.py: ${err.message}`);
+  process.exit(1);
+});
+
+child.on('exit', (code) => {
+  process.exit(code || 0);
+});
+

@@ -1,0 +1,5 @@
+#!/usr/bin/env node
+// Symlink wrapper for anti_abstractor.cjs
+
+require('../src/analysis/anti_abstractor.cjs');
+

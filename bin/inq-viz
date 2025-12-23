@@ -1,0 +1,5 @@
+#!/usr/bin/env node
+// Symlink wrapper for server.cjs
+
+require('../src/viz/server.cjs');
+

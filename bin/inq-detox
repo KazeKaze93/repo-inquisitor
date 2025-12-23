@@ -1,0 +1,5 @@
+#!/usr/bin/env node
+// Symlink wrapper for dependency_detox.cjs
+
+require('../src/analysis/dependency_detox.cjs');
+

@@ -1,0 +1,19 @@
+{
+  "name": "@your-org/core-lib",
+  "version": "1.0.0",
+  "scripts": {
+    "setup:python": "node scripts/install.js",
+    "postinstall": "node scripts/install.js",
+    "build": "tsc"
+  },
+  "files": [
+    "dist",
+    "scripts",
+    "requirements.txt",
+    "src",
+    "README.md"
+  ],
+  "devDependencies": {
+    "@types/node": "^25.0.3"
+  }
+}
