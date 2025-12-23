@@ -1,14 +1,16 @@
 ## 📦 Repo Inquisitor
 
-> **Hybrid Node + Python toolkit for poking at repositories.**  
+> **Hybrid Node + Python toolkit for repository analysis and code quality.**  
 > TypeScript on the outside, Python on the inside.
 
-`@kazekaze93/repo-inquisitor` is a small core library and CLI that:
+`@kazekaze93/repo-inquisitor` is a comprehensive audit and analysis toolkit that:
 
 - **Bridges Node ↔ Python** via a thin `child_process` wrapper (`PythonBridge`).
 - **Bootstraps a Python venv** on install (`scripts/install.js` + `requirements.txt`).
-- Exposes a **CLI entrypoint** `inquisitor` that delegates to Python scripts in `python_src`.
-- Ships a few **internal helpers** (analysis/viz/reviewer/AI context tooling) used by higher-level tools.
+- Exposes a **CLI entrypoint** `inquisitor` with multiple analysis commands.
+- Provides **code analysis tools** (dead code detection, dependency cleanup, style checking).
+- Includes **AI-powered code review** using Gemini API.
+- Features **dependency visualization** and **context packing** for AI models.
 
 The goal is to keep the integration minimal and explicit, not to build Yet Another Framework™.
 
@@ -76,19 +78,60 @@ The bridge assumes that the Python script:
 
 ## 🧰 Usage (CLI)
 
-After installing, you get a `inquisitor` binary on your `PATH`:
+After installing, you get an `inquisitor` binary on your `PATH`:
 
 ```bash
 npx inquisitor <command> [...args]
 ```
 
-Commands are mapped to Python scripts inside `python_src/` in `src/cli.ts`.  
-Out of the box, the map looks like this (you’re expected to adapt it to your project):
+### Available Commands
 
-- **analyze** → `python_src/analyzer.py` (you provide the script)
-- **setup** → `python_src/setup_db.py` (you provide the script)
+#### 🐍 Python Tools
 
-You can extend or change the map in `src/cli.ts` to wire new commands to your own Python entrypoints.
+- **`analyze`** - Analyze file statistics and types (Python)
+
+  ```bash
+  inquisitor analyze ./src
+  ```
+
+- **`police`** - Scan for forbidden patterns & styles (Python)
+
+  ```bash
+  inquisitor police ./src
+  ```
+
+- **`review`** - AI Code Reviewer using Gemini + GitHub (Python)
+  ```bash
+  # Requires GEMINI_API_KEY and GITHUB_TOKEN environment variables
+  inquisitor review
+  ```
+
+#### 🟢 Node Tools
+
+- **`audit`** - Find dead code and over-abstractions (Node)
+
+  ```bash
+  inquisitor audit
+  ```
+
+- **`detox`** - Analyze and clean unused dependencies (Node)
+
+  ```bash
+  inquisitor detox
+  ```
+
+- **`viz`** - Start interactive dependency visualizer (Node)
+
+  ```bash
+  inquisitor viz
+  ```
+
+- **`ctx`** - Pack full project context for Gemini 2.5 (Node)
+  ```bash
+  inquisitor ctx:pack
+  ```
+
+Run `inquisitor --help` to see all available commands with descriptions.
 
 ## 🐍 Requirements
 
@@ -109,8 +152,27 @@ You can extend or change the map in `src/cli.ts` to wire new commands to your ow
 
 5. **Do not commit** `venv/` or `__pycache__/`.
 
+## 📁 Project Structure
+
+```
+repo-inquisitor/
+├── src/              # TypeScript source
+│   ├── cli.ts        # CLI entrypoint and command registry
+│   ├── bridge.ts     # PythonBridge implementation
+│   ├── ai/           # AI context packing utilities
+│   ├── analysis/     # Node.js analysis tools (audit, detox)
+│   └── viz/          # Dependency visualization server
+├── python_src/       # Python scripts
+│   ├── analyzer.py   # File statistics analyzer
+│   ├── police.py     # Pattern/style scanner
+│   └── reviewer/     # AI code reviewer
+├── bin/              # Binary symlinks (inq-audit, inq-detox, etc.)
+└── dist/             # Compiled TypeScript output
+```
+
 ## ⚠️ Notes & Limitations
 
 - If Python is not in `PATH`, the install/setup scripts will fail fast on purpose.
-- The default CLI command mapping is intentionally minimal; treat it as a template, not a contract.
-- `requirements.txt` is currently empty on purpose—add only what you actually use.
+- The `review` command requires `GEMINI_API_KEY` and `GITHUB_TOKEN` environment variables.
+- Commands can be extended or modified in `src/cli.ts` by updating the `COMMANDS` registry.
+- `requirements.txt` should contain only the Python dependencies you actually use.
