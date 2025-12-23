@@ -1,19 +1,26 @@
 {
-  "name": "@your-org/core-lib",
+  "name": "@kazekaze93/core-lib",
   "version": "1.0.0",
+  "bin": {
+    "inquisitor": "./dist/cli.js"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
+    "build": "tsc",
+    "prepare": "npm run build",
     "setup:python": "node scripts/install.js",
-    "postinstall": "node scripts/install.js",
-    "build": "tsc"
+    "postinstall": "node scripts/install.js"
   },
   "files": [
     "dist",
     "scripts",
     "requirements.txt",
-    "src",
+    "python_src",
     "README.md"
   ],
   "devDependencies": {
-    "@types/node": "^25.0.3"
+    "@types/node": "^25.0.3",
+    "typescript": "^5.0.0"
   }
 }
