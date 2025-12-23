@@ -3,6 +3,8 @@ import path from "path";
 import { fork } from "child_process";
 import { PythonBridge } from "./bridge";
 
+// === CONFIGURATION ===
+
 type CommandType = "python" | "node";
 
 interface CommandDef {
@@ -11,7 +13,9 @@ interface CommandDef {
   description: string;
 }
 
+// Реестр команд
 const COMMANDS: Record<string, CommandDef> = {
+  // 🐍 Python Tools
   analyze: {
     type: "python",
     file: "python_src/analyzer.py",
@@ -22,6 +26,13 @@ const COMMANDS: Record<string, CommandDef> = {
     file: "python_src/police.py",
     description: "Scan for forbidden patterns & styles (Python)",
   },
+  review: {
+    type: "python",
+    file: "python_src/reviewer/ai_reviewer.py",
+    description: "AI Code Reviewer (Gemini + GitHub) (Python)",
+  },
+
+  // 🟢 Node Tools
   audit: {
     type: "node",
     file: "src/analysis/anti_abstractor.cjs",
@@ -37,7 +48,19 @@ const COMMANDS: Record<string, CommandDef> = {
     file: "src/viz/server.cjs",
     description: "Start interactive dependency visualizer (Node)",
   },
+  "ctx:pack": {
+    type: "node",
+    file: "dist/ai/context-packer.js",
+    description: "Pack project context for LLM (Node)",
+  },
+  "ctx:prompt": {
+    type: "node",
+    file: "dist/ai/gen-gemini-prompt.js",
+    description: "Generate Gemini System Prompt (Node)",
+  },
 };
+
+// === HELPERS ===
 
 function printHelp() {
   console.log(`
@@ -59,20 +82,24 @@ function printHelp() {
   console.log(`
 \x1b[33mExamples:\x1b[0m
   inquisitor analyze ./src
-  inquisitor police ./components
-  inquisitor viz
+  inquisitor review (requires ENV vars)
+  inquisitor ctx:pack
 `);
 }
+
+// === MAIN ===
 
 async function main() {
   const args = process.argv.slice(2);
   const commandName = args[0];
 
+  // 1. Handle Help or Empty
   if (!commandName || args.includes("--help") || args.includes("-h")) {
     printHelp();
     process.exit(0);
   }
 
+  // 2. Validate Command
   const command = COMMANDS[commandName];
   if (!command) {
     console.error(`❌ Unknown command: "${commandName}"`);
@@ -87,11 +114,14 @@ async function main() {
     `🚀 Executing \x1b[36m${commandName}\x1b[0m [${command.type}]...`
   );
 
+  // 3. Execute
   if (command.type === "python") {
+    // --- PYTHON EXECUTION ---
     const bridge = new PythonBridge();
     const scriptPath = path.join(projectRoot, command.file);
 
     try {
+      // Pass Env Vars explicitly for AI Reviewer
       const result = await bridge.executeScript(scriptPath, scriptArgs);
 
       if (result.logs && result.logs.length > 0) {
@@ -114,6 +144,7 @@ async function main() {
       process.exit(1);
     }
   } else {
+    // --- NODE EXECUTION ---
     const scriptPath = path.join(projectRoot, command.file);
 
     // Forking allows the script to have its own process.argv and isolation
@@ -124,6 +155,13 @@ async function main() {
 
     child.on("exit", (code) => {
       process.exit(code ?? 0);
+    });
+
+    child.on("error", (err) => {
+      // Fallback: If .js not found (maybe running locally in dev without build), try .ts with tsx?
+      // For now, just error out cleanly.
+      console.error(`❌ Failed to start Node script: ${scriptPath}`);
+      console.error(`Make sure you ran 'npm run build' so dist/ files exist.`);
     });
   }
 }
