@@ -17,7 +17,7 @@ This library serves as the core logic layer, bridging TypeScript interfaces with
 Since this is a private Git dependency (or public, we don't judge), install it via:
 
 ```bash
-npm install git+ssh://git@github.com:YOUR_ORG/YOUR_REPO.git
+npm install git+ssh://git@github.com/KazeKaze93/repo-inquisitor.git
 ```
 
 The package will **automatically** attempt to set up the Python environment via the `postinstall` script. If it fails (because Python isn't installed, or you're on a restricted system, or the stars aren't aligned), you can manually trigger the setup:
@@ -73,3 +73,4 @@ async function run() {
 - If Python isn't in PATH, the installation will fail. This is by design—we're not going to search your entire filesystem.
 - Windows users: Make sure `python` (not just `py`) is in your PATH, or the script will cry.
 - The venv is created in the project root. If you don't like it, modify `scripts/install.js` (but you probably won't).
+
