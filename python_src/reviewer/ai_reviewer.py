@@ -97,6 +97,11 @@ def get_pr_data() -> Tuple[object, str, str, str]:
                 continue
 
             if f.filename.endswith(REVIEWABLE_EXTENSIONS):
+                # Guard against None patch (binary files, large diffs, or pure renames)
+                if not f.patch:
+                    logger.warning(f"Skipping {f.filename}: No patch data available (binary or too large).")
+                    continue
+
                 # Limit patch size per file to avoid context overflow on huge files
                 patch = f.patch if len(f.patch) < 20000 else f.patch[:20000] + "\n... [TRUNCATED]"
                 diff_content.append(f"### File: {f.filename}\n```diff\n{patch}\n```")
