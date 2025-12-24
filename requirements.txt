@@ -1,6 +1,6 @@
 # Python dependencies for repo-inquisitor
 
 
-google-generativeai
+google-genai
 PyGithub
 
