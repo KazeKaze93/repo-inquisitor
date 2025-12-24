@@ -7,7 +7,7 @@ const { spawn } = require("child_process");
 const path = require("path");
 
 const PORT = 3000;
-const ROOT_DIR = path.resolve(__dirname, "../../");
+const ROOT_DIR = process.cwd();
 const SRC_DIR = path.join(ROOT_DIR, "src");
 
 const app = express();
