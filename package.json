@@ -25,6 +25,11 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.7.4",
+    "madge": "^6.1.0",
+    "chokidar": "^3.5.3",
+    "open": "^10.0.3",
     "repomix": "^1.11.0"
   }
 }
